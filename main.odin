@@ -1,4 +1,4 @@
-package main
+package pohja
 
 main :: proc() {
     init(1)

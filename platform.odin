@@ -1,4 +1,4 @@
-package main
+package pohja
 
 import "core:log"
 import "base:runtime"
@@ -64,7 +64,7 @@ application_request_shutdown :: #force_inline proc() {
 
 cleanup :: proc() {
     for i := platform.max_windows - 1; i >= 0; i -= 1 {
-        header := cast(^WindowStateHeader)_get_state(WindowID(i))
+        header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
         
         if !header.is_alive {
             continue
@@ -86,7 +86,7 @@ run :: proc() {
 		defer PLATFORM_API.clear_events()
 
         for i := platform.max_windows - 1; i >= 0; i -= 1 {
-            header := cast(^WindowStateHeader)_get_state(WindowID(i))
+            header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
             
             if !header.is_alive {
                 continue
@@ -155,32 +155,32 @@ WindowStateHeader :: struct {
     flags: WindowFlags
 }
 
-_is_state_alive :: proc(state: rawptr) -> bool {
+is_state_alive :: proc(state: rawptr) -> bool {
     header := cast(^WindowStateHeader)state
     return header.is_alive
 }
 
-_get_first_alive :: proc() -> (state: rawptr, id: WindowID) {
+get_first_alive_state :: proc() -> (state: rawptr, id: WindowID) {
 	for i in 0..<platform.max_windows {
-        state_ptr := _get_state(WindowID(i))
-        if _is_state_alive(state_ptr) {
+        state_ptr := get_state_from_id(WindowID(i))
+        if is_state_alive(state_ptr) {
         	return state_ptr, WindowID(i)
         }
     }
     log.panic("All window states are dead!")
 }
 
-_get_free_state :: proc() -> (state: rawptr, id: WindowID) {
+get_free_state :: proc() -> (state: rawptr, id: WindowID) {
     for i in 0..<platform.max_windows {
-        state_ptr := _get_state(WindowID(i))
-        if !_is_state_alive(state_ptr) {
+        state_ptr := get_state_from_id(WindowID(i))
+        if !is_state_alive(state_ptr) {
             return state_ptr, WindowID(i)
         }
     }
     log.panic("All window states are in use!")
 }
 
-_get_state :: proc(id: WindowID) -> rawptr {
+get_state_from_id :: proc(id: WindowID) -> rawptr {
     assert(int(id) < platform.max_windows && int(id) >= 0, "Invalid WindowID")
     
     offset := platform.state_size * int(id)
@@ -197,7 +197,7 @@ input_update_state :: proc() {
 	for event in events {
 		switch e in event {
 			case WindowEventCloseRequested:
-                header := cast(^WindowStateHeader)_get_state(e.id)
+                header := cast(^WindowStateHeader)get_state_from_id(e.id)
 				header.close_requested = true
 
 			case KeyPressedEvent:
@@ -211,17 +211,17 @@ input_update_state :: proc() {
 
 			
 			case WindowMinimizeStartEvent:
-                header := cast(^WindowStateHeader)_get_state(e.id)
+                header := cast(^WindowStateHeader)get_state_from_id(e.id)
 				header.is_minimized = true
 			case WindowMinimizeEndEvent:
-                header := cast(^WindowStateHeader)_get_state(e.id)
+                header := cast(^WindowStateHeader)get_state_from_id(e.id)
 				header.is_minimized = false
 				
 			case WindowBecameVisibleEvent:
-                header := cast(^WindowStateHeader)_get_state(e.id)
+                header := cast(^WindowStateHeader)get_state_from_id(e.id)
 				header.is_visible = true
 			case WindowBecameHiddenEvent:
-                header := cast(^WindowStateHeader)_get_state(e.id)
+                header := cast(^WindowStateHeader)get_state_from_id(e.id)
 				header.is_visible = false
 			
 			case WindowEnterFullscreenEvent:
@@ -229,10 +229,10 @@ input_update_state :: proc() {
 			case WindowMoveEvent:
 
 			case WindowDidBecomeKey:
-                header := cast(^WindowStateHeader)_get_state(e.id)
+                header := cast(^WindowStateHeader)get_state_from_id(e.id)
 				header.is_focused = true
 			case WindowDidResignKey:
-                header := cast(^WindowStateHeader)_get_state(e.id)
+                header := cast(^WindowStateHeader)get_state_from_id(e.id)
 				header.is_focused = false
 
 			case MousePressedEvent:

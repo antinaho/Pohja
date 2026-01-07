@@ -1,7 +1,7 @@
 #+build darwin
 #+private file
 
-package main
+package pohja
 
 import NS "core:sys/darwin/Foundation"
 
@@ -31,13 +31,13 @@ DARWIN_PLATFORM_API :: PlatformAPI {
 }
 
 get_window_width_darwin :: proc(id: WindowID) -> int {
-	state := cast(^darwinWindowState)_get_state(id)
+	state := cast(^DarwinWindowState)get_state_from_id(id)
 	frame := state.window->frame()
 	return int(frame.width)
 }
 
 get_window_height_darwin :: proc(id: WindowID) -> int {
-	state := cast(^darwinWindowState)_get_state(id)
+	state := cast(^DarwinWindowState)get_state_from_id(id)
 	frame := state.window->frame()
 	return int(frame.height)
 }
@@ -45,8 +45,8 @@ get_window_height_darwin :: proc(id: WindowID) -> int {
 process_events_darwin :: proc() {
 	event: ^NS.Event
 	// All state.application refer to same NS.Application, just need to get a alive state
-	alive_state, id := _get_first_alive()
-	state := cast(^darwinWindowState)alive_state
+	alive_state, id := get_first_alive_state()
+	state := cast(^DarwinWindowState)alive_state
 
 	for {
 		event = state.application->nextEventMatchingMask(NS.EventMaskAny, NS.Date_distantPast(), NS.DefaultRunLoopMode, true)
@@ -58,20 +58,13 @@ process_events_darwin :: proc() {
 			case .KeyUp:
 				input_new_event(KeyReleasedEvent{key=code_to_keyboard_key[event->keyCode()]})
 			
-			case .LeftMouseDown:
-				input_new_event(MousePressedEvent{button=code_to_mouse_button[InputMouseButton.Left]})
+			case .LeftMouseDown, .RightMouseDown, .OtherMouseDown:
+				btn_n := event->buttonNumber()
+				input_new_event(MousePressedEvent{button=code_to_mouse_button[int(btn_n)]})
 			case .LeftMouseUp, .RightMouseUp, .OtherMouseUp:
 				btn_n := event->buttonNumber()
 				input_new_event(MouseReleasedEvent{button=code_to_mouse_button[int(btn_n)]})
-			case .RightMouseDown:
-				input_new_event(MousePressedEvent{button=code_to_mouse_button[InputMouseButton.Right]})
 
-
-			case .OtherMouseDown:
-				btn_n := event->buttonNumber()
-				input_new_event(MousePressedEvent{button=code_to_mouse_button[int(btn_n)]})
-
-			
 			case .MouseMoved, .LeftMouseDragged, .RightMouseDragged, .OtherMouseDragged:
 				position := event->locationInWindow()				
 				input_new_event(MousePositionEvent{x=f64(position.x), y=f64(position.y)})
@@ -241,7 +234,7 @@ code_to_keyboard_key := [255]InputKeyboardKey {
 }
 
 set_window_position_darwin :: proc(id: WindowID, x, y: int) {
-	state := cast(^darwinWindowState)_get_state(id)
+	state := cast(^DarwinWindowState)get_state_from_id(id)
 	state.x = x
 	state.y = y
 
@@ -254,7 +247,7 @@ set_window_position_darwin :: proc(id: WindowID, x, y: int) {
 } 
 
 set_window_size_darwin :: proc(id: WindowID, w, h: int) {
-	state := cast(^darwinWindowState)_get_state(id)
+	state := cast(^DarwinWindowState)get_state_from_id(id)
 
 	frame := state.window->frame()
 	frame.size = {
@@ -266,19 +259,19 @@ set_window_size_darwin :: proc(id: WindowID, w, h: int) {
 } 
 
 get_native_window_handle_darwin :: proc(id: WindowID) -> WindowHandle {
-	state := cast(^darwinWindowState)_get_state(id)
+	state := cast(^DarwinWindowState)get_state_from_id(id)
 	return cast(WindowHandle)state.window
 }
 
 window_close_darwin :: proc(id: WindowID) {
-    state := cast(^darwinWindowState)_get_state(id)
+    state := cast(^DarwinWindowState)get_state_from_id(id)
     
     state.window->close()
 
     state.is_alive = false
 }
 
-darwinWindowState :: struct {
+DarwinWindowState :: struct {
 	using header : WindowStateHeader,
 
 	application: ^NS.Application,
@@ -286,14 +279,14 @@ darwinWindowState :: struct {
 }
 
 window_state_size_darwin :: proc() -> int {
-	return size_of(darwinWindowState)
+	return size_of(DarwinWindowState)
 }
 
 window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
-    state, id := _get_free_state()
-    darwin_state := cast(^darwinWindowState)state
+    state, id := get_free_state()
+    darwin_state := cast(^DarwinWindowState)state
     
-	darwin_state^ = darwinWindowState {
+	darwin_state^ = DarwinWindowState {
 		application = NS.Application.sharedApplication(),
 		window = NS.Window_alloc(),
 		x = desc.x,
@@ -444,22 +437,22 @@ window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
 WindowDelegate: ^intrinsics.objc_class
 		
 WindowEventsAPI :: struct {
-	application_window				  : ^darwinWindowState,
-	window_should_close		          : proc(state: ^darwinWindowState, notification: ^NS.Notification),
+	application_window				  : ^DarwinWindowState,
+	window_should_close		          : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
 	window_will_close                 : proc(notification: ^NS.Notification),
-	window_will_start_live_resize     : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_end_live_resize        : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_resize                 : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_miniaturize            : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_deminiaturize          : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_enter_fullscreen       : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_exit_fullscreen        : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_move               	  : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_become_key             : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_resign_key             : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_become_main            : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_resign_main            : proc(state: ^darwinWindowState, notification: ^NS.Notification),
-	window_did_change_occlusion_state : proc(state: ^darwinWindowState, notification: ^NS.Notification),
+	window_will_start_live_resize     : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_end_live_resize        : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_resize                 : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_miniaturize            : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_deminiaturize          : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_enter_fullscreen       : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_exit_fullscreen        : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_move               	  : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_become_key             : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_resign_key             : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_become_main            : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_resign_main            : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
+	window_did_change_occlusion_state : proc(state: ^DarwinWindowState, notification: ^NS.Notification),
 }
 
 @(objc_class="GameWindowDelegate", objc_superclass=NS.Object, objc_implement=true)
@@ -470,7 +463,7 @@ GameWindowDelegate :: struct {
 ///////////////////
 // Closing window
 
-window_should_close :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_should_close :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
     input_new_event(WindowEventCloseRequested{ state.id })
 }
 
@@ -479,7 +472,7 @@ window_will_close :: proc (notification: ^NS.Notification) { }
 ///////////////////
 // Resizing window
 
-window_did_resize :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_resize :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	frame := state.window->frame()
     state.width = int(frame.width)
     state.height = int(frame.height)
@@ -489,29 +482,29 @@ window_did_resize :: proc (state: ^darwinWindowState, notification: ^NS.Notifica
 ///////////////////////
 // Minimizing window
 
-window_did_miniaturize :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_miniaturize :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	input_new_event(WindowMinimizeStartEvent{ state.id })
 }
 
-window_did_deminiaturize :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_deminiaturize :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	input_new_event(WindowMinimizeEndEvent{ state.id })
 }
 
 ///////////////////////
 // Fullscreen window
 
-window_did_enter_fullscreen :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_enter_fullscreen :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	input_new_event(WindowEnterFullscreenEvent{ state.id })
 }
 
-window_did_exit_fullscreen :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_exit_fullscreen :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	input_new_event(WindowExitFullscreenEvent{ state.id })
 }
 
 ///////////////////////
 // Moving window
 
-window_did_move :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_move :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
     frame := state.window->frame()
 	x := frame.x
 	y := frame.y
@@ -524,12 +517,12 @@ window_did_move :: proc (state: ^darwinWindowState, notification: ^NS.Notificati
 ///////////////////////
 // Focusing window
 
-window_did_become_key :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_become_key :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	state.is_focused = true
 	input_new_event(WindowDidBecomeKey{ state.id })
 }
 
-window_did_resign_key :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_resign_key :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	state.is_focused = false
 	input_new_event(WindowDidResignKey{ state.id })
 }
@@ -537,7 +530,7 @@ window_did_resign_key :: proc (state: ^darwinWindowState, notification: ^NS.Noti
 //////////////////////
 // Occlusion state
 
-window_did_change_occlusion_state :: proc (state: ^darwinWindowState, notification: ^NS.Notification) {
+window_did_change_occlusion_state :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
 	visible := state.window->occlusionStateVisible()
 	state.is_visible = visible
 
