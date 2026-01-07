@@ -44,6 +44,7 @@ get_window_height_darwin :: proc(id: WindowID) -> int {
 
 process_events_darwin :: proc() {
 	event: ^NS.Event
+	
 	// All state.application refer to same NS.Application, just need to get a alive state
 	alive_state, id := get_first_alive_state()
 	state := cast(^DarwinWindowState)alive_state

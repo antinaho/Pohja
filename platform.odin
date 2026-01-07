@@ -39,6 +39,9 @@ Platform :: struct {
     shutdown_requested: bool,
 }
 
+// Callback type for per-frame updates. The user_data is passed through from the platform.
+FrameCallback :: proc(user_data: rawptr)
+
 init :: proc(max_windows: int = 1) {
 	assert(max_windows >= 1, "Need at least 1 window!")
 
@@ -62,6 +65,14 @@ application_request_shutdown :: #force_inline proc() {
 	platform.shutdown_requested = true
 }
 
+// Sets a callback to be invoked each frame. External libraries (e.g., renderers)
+// can use this to hook into the platform's main loop.
+set_frame_callback :: proc(id: WindowID, callback: FrameCallback, user_data: rawptr = nil) {
+	header := cast(^WindowStateHeader)get_state_from_id(id)
+	header.frame_callback = callback
+	header.user_data = user_data
+}
+
 cleanup :: proc() {
     for i := platform.max_windows - 1; i >= 0; i -= 1 {
         header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
@@ -77,6 +88,7 @@ cleanup :: proc() {
 
 run :: proc() {
     defer cleanup()
+
     for !platform.shutdown_requested { 
         free_all(platform.frame_allocator)
 
@@ -101,6 +113,15 @@ run :: proc() {
                 header.close_requested = false
             }
         }
+
+		for i in 0..<platform.max_windows {
+			header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
+			
+			if header.frame_callback != nil {
+				header.frame_callback(header.user_data)
+			}
+		}
+
     }
 }
 
@@ -125,6 +146,7 @@ PlatformAPI :: struct {
 
 WindowID :: distinct u32
 WindowHandle :: distinct uintptr
+
 WindowDescription :: struct {
 	x: int,
 	y: int,
@@ -152,7 +174,12 @@ WindowStateHeader :: struct {
     is_visible: bool,
     is_focused: bool,
     is_minimized: bool,
-    flags: WindowFlags
+    flags: WindowFlags,
+	
+	// User-provided callback invoked each frame. External libraries (e.g., renderers)
+    // can set this to hook into the platform's main loop.
+    frame_callback: FrameCallback,
+    user_data: rawptr,
 }
 
 is_state_alive :: proc(state: rawptr) -> bool {
@@ -208,7 +235,9 @@ input_update_state :: proc() {
 				platform.keys_held[e.key] = false
 
 			case WindowResizeEvent:
-
+				header := cast(^WindowStateHeader)get_state_from_id(e.id)
+				header.width = e.width
+				header.height = e.height
 			
 			case WindowMinimizeStartEvent:
                 header := cast(^WindowStateHeader)get_state_from_id(e.id)
