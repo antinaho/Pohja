@@ -8,7 +8,7 @@ main :: proc() {
         width = 600,
         height = 600,
         title = "Hellope",
-        window_flags = {.MainWindow, .CenterOnOpen}
+        flags = {.MainWindow, .CenterOnOpen, .Resizable, .Decorated, .Visible},
     })
     run()
 }
