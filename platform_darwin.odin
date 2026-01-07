@@ -295,7 +295,7 @@ window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
 		width = desc.width,
 		height = desc.height,
 		title = desc.title,
-        flags = desc.window_flags,
+        flags = desc.flags,
         id = id,
         is_alive = true,
 	}
@@ -315,12 +315,12 @@ window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
 	darwin_state.window->setTitle(w_title)
 	darwin_state.window->setBackgroundColor(NS.Color_purpleColor())
 
-    if .MainWindow in desc.window_flags {
+    if .MainWindow in desc.flags {
         darwin_state.window->makeKeyAndOrderFront(nil)
     	darwin_state.window->makeMainWindow()
     }
 	
-    if .CenterOnOpen in desc.window_flags {
+    if .CenterOnOpen in desc.flags {
         darwin_state.window->center()
     }
 	
@@ -484,11 +484,11 @@ window_did_resize :: proc (state: ^DarwinWindowState, notification: ^NS.Notifica
 // Minimizing window
 
 window_did_miniaturize :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
-	input_new_event(WindowMinimizeStartEvent{ state.id })
+	input_new_event(WindowUnmaximizeEvent{ state.id })
 }
 
 window_did_deminiaturize :: proc (state: ^DarwinWindowState, notification: ^NS.Notification) {
-	input_new_event(WindowMinimizeEndEvent{ state.id })
+	input_new_event(WindowUnmaximizeEvent{ state.id })
 }
 
 ///////////////////////
