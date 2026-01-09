@@ -2,6 +2,7 @@ package pohja
 
 import "core:log"
 import "base:runtime"
+import "core:mem"
 
 when ODIN_OS == .Darwin {
 	DEFAULT_PLATFORM_API :: DARWIN_PLATFORM_API
@@ -15,6 +16,12 @@ PLATFORM_API :: DEFAULT_PLATFORM_API
 platform: Platform
 
 Platform :: struct {
+
+	platform_arena: mem.Arena,
+
+	is_active: bool,
+	registry: ^Window_Registry,
+
 	window_states: []byte,
 	state_size: int,
 	max_windows: int,
@@ -46,16 +53,43 @@ FrameCallback :: proc(user_data: rawptr)
 init :: proc(max_windows: int = 1) {
 	assert(max_windows >= 1, "Need at least 1 window!")
 
+	platform.ctx = context
+
+	backing := make([]byte, mem.Kilobyte)
+	mem.arena_init(&platform.platform_arena, backing)
+	arena_allocator := mem.arena_allocator(&platform.platform_arena)
+
 	state_size := PLATFORM_API.window_state_size()
-    platform.window_states = make([]byte, state_size * max_windows)
+    platform.window_states = make([]byte, state_size * max_windows, arena_allocator)
     platform.state_size = state_size
     platform.max_windows = max_windows
+
+	platform.registry = new(Window_Registry, arena_allocator)
+	platform.registry^ = Window_Registry {
+		handle_to_id = make(map[WindowHandle]WindowID, arena_allocator),
+		id_to_handle = make(map[WindowID]WindowHandle, arena_allocator),
+	}
+
     platform.frame_allocator = context.temp_allocator
+}
+
+Window_Registry :: struct {
+    handle_to_id: map[WindowHandle]WindowID,
+    id_to_handle: map[WindowID]WindowHandle,
 }
 
 // Creates a new window and returns its ID.
 open_window :: proc(desc: WindowDescription) -> WindowID {
     return PLATFORM_API.window_open(desc)
+}
+
+register_window :: proc(window: WindowHandle) {
+    platform.registry.handle_to_id[window] = id
+    platform.registry.id_to_handle[id] = window
+}
+
+lookup_window_id :: proc(window: WindowHandle) -> (WindowID, bool) {
+    return platform.registry.handle_to_id[window]
 }
 
 // Closes the window with the given ID.
@@ -71,7 +105,7 @@ application_request_shutdown :: #force_inline proc() {
 
 // Sets a callback to be invoked each frame. External libraries (e.g., renderers)
 // can use this to hook into the platform's main loop.
-set_frame_callback :: proc(id: WindowID, callback: FrameCallback, user_data: rawptr = nil) {
+set_frame_callback :: proc(id: WindowID, callback: FrameCallback, user_data: rawptr) {
 	header := cast(^WindowStateHeader)get_state_from_id(id)
 	header.frame_callback = callback
 	header.user_data = user_data
@@ -91,18 +125,11 @@ set_window_visible :: proc(id: WindowID, visible: bool) {
 	PLATFORM_API.set_window_visible(id, visible)
 }
 
-// Maximizes or restores the window.
-set_window_maximized :: proc(id: WindowID, maximized: bool) {
+// Sets the window display mode (windowed, maximized, fullscreen, etc.)
+set_window_mode :: proc(id: WindowID, mode: WindowMode) {
 	header := cast(^WindowStateHeader)get_state_from_id(id)
-	header.is_maximized = maximized
-	PLATFORM_API.set_window_maximized(id, maximized)
-}
-
-// Sets the window fullscreen mode.
-set_window_fullscreen :: proc(id: WindowID, mode: FullscreenMode) {
-	header := cast(^WindowStateHeader)get_state_from_id(id)
-	header.fullscreen_mode = mode
-	PLATFORM_API.set_window_fullscreen(id, mode)
+	header.window_mode = mode
+	PLATFORM_API.set_window_mode(id, mode)
 }
 
 // Brings the window to front and gives it input focus.
@@ -126,9 +153,10 @@ cleanup :: proc() {
         PLATFORM_API.window_close(WindowID(i))
     }
 
-    delete(platform.window_states)
+	delete(platform.platform_arena.data)
 }
 
+import "core:fmt"
 // Runs the main loop. Processes events and invokes per-window frame callbacks.
 // Blocks until application_request_shutdown() is called or main window closes.
 run :: proc() {
@@ -139,12 +167,11 @@ run :: proc() {
 
         input_reset_state()
 		PLATFORM_API.process_events()
-		input_update_state()
 		defer PLATFORM_API.clear_events()
 
         for i := platform.max_windows - 1; i >= 0; i -= 1 {
             header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
-            
+
             if !header.is_alive {
                 continue
             }
@@ -183,8 +210,7 @@ PlatformAPI :: struct {
 	set_window_title: proc(id: WindowID, title: string),
 	set_window_visible: proc(id: WindowID, visible: bool),
 	set_window_minimized: proc(id: WindowID, minimized: bool),
-	set_window_maximized: proc(id: WindowID, maximized: bool),
-	set_window_fullscreen: proc(id: WindowID, mode: FullscreenMode),
+	set_window_mode: proc(id: WindowID, mode: WindowMode),
 	focus_window: proc(id: WindowID),
 
 	process_events: proc(),
@@ -198,7 +224,8 @@ PlatformAPI :: struct {
 WindowID :: distinct u32
 WindowHandle :: distinct uintptr
 
-FullscreenMode :: enum {
+// Window display modes (mutually exclusive)
+WindowMode :: enum {
 	Windowed,
 	Fullscreen,
 	BorderlessFullscreen,
@@ -211,11 +238,13 @@ WindowDescription :: struct {
 	height: int,
 	title: string,
 	flags: WindowFlags,
+
 	// Size constraints (0 = no constraint)
 	min_width: int,
 	min_height: int,
 	max_width: int,
 	max_height: int,
+
 	// Aspect ratio constraint (0 = no constraint). Expressed as width/height ratio.
 	aspect_ratio: f32,
 }
@@ -234,20 +263,23 @@ WindowFlag :: enum {
 
 WindowStateHeader :: struct {
 	id: WindowID,
-	width: int,
-	height: int,
-	title: string,
-	x: int,
-	y: int,
 	is_alive: bool,
 	close_requested: bool,
+	
+	title: string,
+	
+	width: int,
+	height: int,
+	x: int,
+	y: int,
+
 	is_visible: bool,
 	is_focused: bool,
-	is_maximized: bool,
-	fullscreen_mode: FullscreenMode,
+	is_minimized: bool,
+	window_mode: WindowMode,
 	flags: WindowFlags,
 	
-	// User-provided callback invoked each frame. External libraries (e.g., renderers)
+	// User-provided callback invoked each frame. External libraries
 	// can set this to hook into the platform's main loop.
 	frame_callback: FrameCallback,
 	user_data: rawptr,
@@ -290,79 +322,6 @@ get_state_from_id :: proc(id: WindowID) -> rawptr {
 }
 
 /////////////////////////////////////////////////////
-
-MAX_INPUT_EVENTS_PER_FRAME :: 128
-
-// Update input state based on the platform events recieved this frame.
-input_update_state :: proc() {
-	events := PLATFORM_API.get_events()
-
-	for event in events {
-		switch e in event {
-			case WindowEventCloseRequested:
-                header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.close_requested = true
-
-			case KeyPressedEvent:
-				platform.keys_press_started[e.key] = platform.keys_held[e.key] ~ true
-				platform.keys_held[e.key] = true
-			case KeyReleasedEvent:
-				platform.keys_released[e.key] = true
-				platform.keys_held[e.key] = false
-
-			case WindowResizeEvent:
-				header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.width = e.width
-				header.height = e.height
-			
-			case WindowBecameVisibleEvent:
-                header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.is_visible = true
-			case WindowBecameHiddenEvent:
-                header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.is_visible = false
-			
-			case WindowEnterFullscreenEvent:
-				header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.fullscreen_mode = .Fullscreen
-			case WindowExitFullscreenEvent:
-				header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.fullscreen_mode = .Windowed
-			
-				case WindowMaximizeEvent:
-				header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.is_maximized = true
-			case WindowUnmaximizeEvent:
-				header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.is_maximized = false
-			case WindowMoveEvent:
-				header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.x = e.x
-				header.y = e.y
-
-			case WindowDidBecomeKey:
-                header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.is_focused = true
-			case WindowDidResignKey:
-                header := cast(^WindowStateHeader)get_state_from_id(e.id)
-				header.is_focused = false
-
-			case MousePressedEvent:
-				platform.mouse_press_started[e.button] = platform.mouse_held[e.button] ~ true
-				platform.mouse_held[e.button] = true
-			case MouseReleasedEvent:
-				platform.mouse_released[e.button] = true
-				platform.mouse_held[e.button] = false
-
-			case MousePositionEvent:
-				platform.mouse_move_delta = {f32(e.x) - platform.mouse_position.x, f32(e.y) - platform.mouse_position.y}
-				platform.mouse_position = {f32(e.x), f32(e.y)}
-
-			case MouseScrollEvent:
-				platform.mouse_scroll_delta = {f32(e.x), f32(e.y)}
-		}
-	}
-}
 
 // Reset input state for a frame.
 input_reset_state :: proc() {
@@ -455,25 +414,16 @@ input_mouse_delta_vector :: proc "contextless" (direction: InputScrollDirection)
 	}
 }
 
-// Pushes a new event to the event queue. Used internally by platform backends.
-input_new_event :: proc "contextless" (event: InputEvent) {
-	if platform.event_count == MAX_INPUT_EVENTS_PER_FRAME - 1 {
-		return
-	}
-
-	platform.events[platform.event_count] = event
-	platform.event_count += 1
-}
-
 InputScrollDirection :: enum {
 	X,
 	Y,
 	Both,
 }
 
-InputEvent :: union {
-	WindowEventCloseRequested,
+MAX_INPUT_EVENTS_PER_FRAME :: 128
 
+// Pushes a new event to the event queue. Used internally by platform backends.
+InputEvent :: union {
 	KeyPressedEvent,
 	KeyReleasedEvent,
 
@@ -481,46 +431,124 @@ InputEvent :: union {
 	MouseReleasedEvent,
 	MousePositionEvent,
 	MouseScrollEvent,
-
-	WindowResizeEvent,
-
-	WindowMaximizeEvent,
-	WindowUnmaximizeEvent,
-
-	WindowEnterFullscreenEvent,
-	WindowExitFullscreenEvent,
-
-	WindowMoveEvent,
-
-	WindowDidBecomeKey,
-	WindowDidResignKey,
-
-	WindowBecameVisibleEvent,
-	WindowBecameHiddenEvent,
 }
 
-WindowEventCloseRequested :: struct { id: WindowID }
-WindowResizeEvent :: struct { id: WindowID, width, height: int }
-
-WindowMaximizeEvent :: struct { id: WindowID }
-WindowUnmaximizeEvent :: struct { id: WindowID }
-
-WindowEnterFullscreenEvent :: struct { id: WindowID }
-WindowExitFullscreenEvent :: struct { id: WindowID }
-
-WindowMoveEvent :: struct { id: WindowID, x, y: int }
-
-WindowDidBecomeKey :: struct { id: WindowID }
-WindowDidResignKey :: struct { id: WindowID }
-WindowBecameVisibleEvent :: struct { id: WindowID }
-WindowBecameHiddenEvent :: struct { id: WindowID }
-
-KeyPressedEvent :: struct { key: InputKeyboardKey }
-KeyReleasedEvent :: struct { key: InputKeyboardKey }
-MousePressedEvent :: struct { button: InputMouseButton }
+KeyPressedEvent    :: struct { key: InputKeyboardKey }
+KeyReleasedEvent   :: struct { key: InputKeyboardKey }
+MousePressedEvent  :: struct { button: InputMouseButton }
 MouseReleasedEvent :: struct { button: InputMouseButton }
 MousePositionEvent :: struct { x, y: f64 }
-MouseScrollEvent :: struct { x, y: f64 }
+MouseScrollEvent   :: struct { x, y: f64 }
+
+emit_input_event :: proc "contextless" (event: InputEvent) {
+	if platform.event_count == MAX_INPUT_EVENTS_PER_FRAME - 1 {
+		return
+	}
+
+	platform.events[platform.event_count] = event
+	platform.event_count += 1
+
+	switch e in event {
+
+		case KeyPressedEvent:
+			platform.keys_press_started[e.key] = platform.keys_held[e.key] ~ true
+			platform.keys_held[e.key] = true
+		case KeyReleasedEvent:
+			platform.keys_released[e.key] = true
+			platform.keys_held[e.key] = false
+			
+		case MousePressedEvent:
+			platform.mouse_press_started[e.button] = platform.mouse_held[e.button] ~ true
+			platform.mouse_held[e.button] = true
+		case MouseReleasedEvent:
+			platform.mouse_released[e.button] = true
+			platform.mouse_held[e.button] = false
+
+		case MousePositionEvent:
+			platform.mouse_move_delta = {f32(e.x) - platform.mouse_position.x, f32(e.y) - platform.mouse_position.y}
+			platform.mouse_position = {f32(e.x), f32(e.y)}
+		
+		case MouseScrollEvent:
+			platform.mouse_scroll_delta = {f32(e.x), f32(e.y)}
+	}
+}
+
+PlatformEvent :: enum {
+	DidBecomeActive,
+	DidResignActive,
+	ShouldTerminate,
+	TerminateAfterLastWindowClosed,
+	DidHide,
+	DidUnhide,
+}
+
+PlatformEventReply :: union {
+	bool,
+}
+
+emit_platform_event :: proc(event: PlatformEvent) -> (reply: PlatformEventReply) {
+	switch event {
+		case .DidBecomeActive:
+			platform.is_active = true
+		case .DidResignActive:
+			platform.is_active = false
+		case .ShouldTerminate:
+			platform.shutdown_requested = true
+			return false
+		case .TerminateAfterLastWindowClosed:
+			return true
+		case .DidHide:
+		case .DidUnhide:
+	}
+
+	return
+}
+
+WindowEvent :: union {
+	DidChangeOcclusionState,
+	WindowShouldClose,
+	WindowDidResize,
+	WindowDidMove,
+	WindowChangeKeyState,
+	WindowChangeMiniaturizeState,
+	WindowChangeFullScreenState,
+}
+
+DidChangeOcclusionState 	 :: struct { sender: WindowID, state: bool }
+WindowShouldClose 			 :: struct { sender: WindowID }
+WindowDidResize 			 :: struct { sender: WindowID, size: [2]int }
+WindowDidMove 				 :: struct { sender: WindowID, position: [2]int }
+WindowChangeKeyState 		 :: struct { sender: WindowID, state: bool }
+WindowChangeMiniaturizeState :: struct { sender: WindowID, state: bool }
+WindowChangeFullScreenState  :: struct { sender: WindowID, state: bool }
+
+emit_window_event :: proc(event: WindowEvent) {
+	switch e in event {
+		case DidChangeOcclusionState:
+			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+			state.is_visible = e.state
+		case WindowShouldClose:
+			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+			state.close_requested = true
+		case WindowDidResize:
+			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+			state.width = e.size.x
+			state.height = e.size.y
+		case WindowDidMove:
+			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+			state.x = e.position.x
+			state.y = e.position.y
+		case WindowChangeKeyState:
+			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+			state.is_focused = e.state
+		case WindowChangeMiniaturizeState:
+			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+			state.is_minimized = e.state
+		case WindowChangeFullScreenState:
+			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+			state.window_mode = .Fullscreen if e.state else .Windowed
+	}
+}
 
 InputMouseButton :: enum {
 	Left 	= 0,
