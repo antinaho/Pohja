@@ -83,7 +83,7 @@ open_window :: proc(desc: WindowDescription) -> WindowID {
     return PLATFORM_API.window_open(desc)
 }
 
-register_window :: proc(window: WindowHandle) {
+register_window :: proc(window: WindowHandle, id: WindowID) {
     platform.registry.handle_to_id[window] = id
     platform.registry.id_to_handle[id] = window
 }
@@ -126,7 +126,7 @@ set_window_visible :: proc(id: WindowID, visible: bool) {
 }
 
 // Sets the window display mode (windowed, maximized, fullscreen, etc.)
-set_window_mode :: proc(id: WindowID, mode: WindowMode) {
+set_window_mode :: proc(id: WindowID, mode: WindowDisplayMode) {
 	header := cast(^WindowStateHeader)get_state_from_id(id)
 	header.window_mode = mode
 	PLATFORM_API.set_window_mode(id, mode)
@@ -142,7 +142,7 @@ get_native_window_handle :: proc(id: WindowID) -> WindowHandle {
 	return PLATFORM_API.get_native_window_handle(id)
 }
 
-// Releases all platform resources. Called automatically by run().
+// Releases all platform resources.
 cleanup :: proc() {
     for i := platform.max_windows - 1; i >= 0; i -= 1 {
         header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
@@ -156,45 +156,46 @@ cleanup :: proc() {
 	delete(platform.platform_arena.data)
 }
 
-import "core:fmt"
-// Runs the main loop. Processes events and invokes per-window frame callbacks.
-// Blocks until application_request_shutdown() is called or main window closes.
-run :: proc() {
-    defer cleanup()
+platform_should_close :: proc() -> bool {
+	return platform.shutdown_requested
+}
 
-    for !platform.shutdown_requested { 
-        free_all(platform.frame_allocator)
+platform_update :: proc() {
+	free_all(platform.frame_allocator)
 
-        input_reset_state()
-		PLATFORM_API.process_events()
-		defer PLATFORM_API.clear_events()
+	input_reset_state()
+	PLATFORM_API.process_events()
+	defer platform.event_count = 0
 
-        for i := platform.max_windows - 1; i >= 0; i -= 1 {
-            header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
+	// Update windows
+	window_close_requested := make(map[WindowID]bool, allocator=platform.frame_allocator)
+	for i in 0..<platform.max_windows {
+		header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
 
-            if !header.is_alive {
-                continue
-            }
-            
-            if header.close_requested {
-                if .MainWindow in header.flags {
-                    application_request_shutdown()
-                }
-
-                PLATFORM_API.window_close(WindowID(i))
-                header.close_requested = false
-            }
-        }
-
-		for i in 0..<platform.max_windows {
-			header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
-			
-			if header.frame_callback != nil {
-				header.frame_callback(header.user_data)
-			}
+		if !header.is_alive {
+			continue
 		}
 
-    }
+		if header.close_requested {
+			window_close_requested[WindowID(i)] = true
+		}
+	
+		if header.frame_callback != nil {
+			header.frame_callback(header.user_data)
+		}
+	}
+
+	// Close windows that requested shutdown
+	for id, state in window_close_requested {
+		header := cast(^WindowStateHeader)get_state_from_id(id)
+
+		if .MainWindow in header.flags {
+			application_request_shutdown()
+		}
+
+		PLATFORM_API.window_close(id)
+		header.close_requested = false
+	}
 }
 
 PlatformAPI :: struct {
@@ -210,12 +211,10 @@ PlatformAPI :: struct {
 	set_window_title: proc(id: WindowID, title: string),
 	set_window_visible: proc(id: WindowID, visible: bool),
 	set_window_minimized: proc(id: WindowID, minimized: bool),
-	set_window_mode: proc(id: WindowID, mode: WindowMode),
+	set_window_mode: proc(id: WindowID, mode: WindowDisplayMode),
 	focus_window: proc(id: WindowID),
 
 	process_events: proc(),
-	get_events: proc() -> []InputEvent,
-	clear_events: proc(),
 
 	get_window_width: proc(id: WindowID) -> int,
 	get_window_height: proc(id: WindowID) -> int,
@@ -224,8 +223,7 @@ PlatformAPI :: struct {
 WindowID :: distinct u32
 WindowHandle :: distinct uintptr
 
-// Window display modes (mutually exclusive)
-WindowMode :: enum {
+WindowDisplayMode :: enum {
 	Windowed,
 	Fullscreen,
 	BorderlessFullscreen,
@@ -276,7 +274,7 @@ WindowStateHeader :: struct {
 	is_visible: bool,
 	is_focused: bool,
 	is_minimized: bool,
-	window_mode: WindowMode,
+	window_mode: WindowDisplayMode,
 	flags: WindowFlags,
 	
 	// User-provided callback invoked each frame. External libraries

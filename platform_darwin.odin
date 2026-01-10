@@ -8,10 +8,8 @@ import NS "core:sys/darwin/Foundation"
 @(private="package")
 DARWIN_PLATFORM_API :: PlatformAPI {
 	window_state_size = window_state_size_darwin,
-
 	window_open = window_open_darwin,
 	window_close = window_close_darwin,
-
 	get_native_window_handle = get_native_window_handle_darwin,
 	set_window_position = set_window_position_darwin,
 	set_window_size = set_window_size_darwin,
@@ -20,20 +18,10 @@ DARWIN_PLATFORM_API :: PlatformAPI {
 	set_window_minimized = set_window_minimized_darwin,
 	set_window_mode = set_window_mode_darwin,
 	focus_window = focus_window_darwin,
-
 	process_events = process_events_darwin,
-	get_events = proc() -> []InputEvent {
-		return platform.events[:platform.event_count]
-	},
-	clear_events = proc() {
-		platform.event_count = 0
-	},
-
 	get_window_width = get_window_width_darwin,
 	get_window_height = get_window_height_darwin,
 }
-
-
 
 get_window_width_darwin :: proc(id: WindowID) -> int {
 	state := cast(^DarwinWindowState)get_state_from_id(id)
@@ -50,7 +38,6 @@ get_window_height_darwin :: proc(id: WindowID) -> int {
 process_events_darwin :: proc() {
 	event: ^NS.Event
 	
-	// NS.Application is global
 	application := NS.Application.sharedApplication()
 
 	for {
@@ -291,7 +278,7 @@ set_window_minimized_darwin :: proc(id: WindowID, minimized: bool) {
 	}
 }
 
-set_window_mode_darwin :: proc(id: WindowID, new_mode: WindowMode) {
+set_window_mode_darwin :: proc(id: WindowID, new_mode: WindowDisplayMode) {
 	state := cast(^DarwinWindowState)get_state_from_id(id)
 	prev_mode := state.window_mode
 
@@ -345,18 +332,6 @@ window_state_size_darwin :: proc() -> int {
 	return size_of(DarwinWindowState)
 }
 
-import "core:strings"
-import "base:runtime"
-
-
-
-import "core:fmt"
-
-
-application_did_finish_launching :: proc(not: ^NS.Notification) {
-	fmt.println("LOL2")
-}
-
 window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
     state, id := get_free_state()
     darwin_state := cast(^DarwinWindowState)state
@@ -387,18 +362,13 @@ window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
 	darwin_state.window->initWithContentRect(rect, {.Resizable, .Closable, .Titled, .Miniaturizable}, .Buffered, false)
 	darwin_state.window->setReleasedWhenClosed(true)
 
-	register_window(cast(WindowHandle)darwin_state.window)
+	register_window(cast(WindowHandle)darwin_state.window, id)
 
 	set_window_title(id, desc.title)
 	
 	darwin_state.window->setBackgroundColor(NS.Color_purpleColor())
 
-    if .MainWindow in desc.flags {
-        darwin_state.window->makeKeyAndOrderFront(nil)
-    	//darwin_state.window->makeMainWindow()
-    } else {
-		darwin_state.window->makeKeyAndOrderFront(nil)
-	}	
+    darwin_state.window->makeKeyAndOrderFront(nil)
 
     if .CenterOnOpen in desc.flags {
         darwin_state.window->center()
@@ -467,7 +437,6 @@ window_did_change_occlusion_state :: proc(notification: ^NS.Notification) {
 	sender_window := cast(^NS.Window)notification->object()
 	window_id := platform.registry.handle_to_id[cast(WindowHandle)sender_window]
 	occlusion_state := sender_window->occlusionStateVisible()
-
 	emit_window_event(DidChangeOcclusionState{
 		sender = window_id,
 		state = bool(occlusion_state),
@@ -476,19 +445,15 @@ window_did_change_occlusion_state :: proc(notification: ^NS.Notification) {
 
 window_should_close :: proc(window: ^NS.Window) -> NS.BOOL {
 	window_id := platform.registry.handle_to_id[cast(WindowHandle)window]
-
 	emit_window_event(WindowShouldClose{
 		sender = window_id,
 	})
-
 	return false
 }
 
 window_did_resize :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
-
 	size := window->frame().size
-
 	emit_window_event(WindowDidResize{
 		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
 		size = {int(size.width), int(size.height)}
@@ -498,7 +463,6 @@ window_did_resize :: proc(notification: ^NS.Notification) {
 window_did_move :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
 	position := window->frame().origin
-
 	emit_window_event(WindowDidMove{
 		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
 		position = {int(position.x), int(position.x)}
