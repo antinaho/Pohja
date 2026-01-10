@@ -25,25 +25,25 @@ Platform :: struct {
 	window_states: []byte,
 	state_size: int,
 	max_windows: int,
-    ctx: runtime.Context,
-    frame_allocator: runtime.Allocator,
+	ctx: runtime.Context,
+	frame_allocator: runtime.Allocator,
 
-	keys_press_started: #sparse [InputKeyboardKey]bool,
-	keys_held: #sparse [InputKeyboardKey]bool,
-	keys_released: #sparse [InputKeyboardKey]bool,
+	keys_press_started: #sparse [Input_Keyboard_Key]bool,
+	keys_held: #sparse [Input_Keyboard_Key]bool,
+	keys_released: #sparse [Input_Keyboard_Key]bool,
 
-	mouse_press_started: #sparse [InputMouseButton]bool,
-	mouse_held: #sparse [InputMouseButton]bool,
-	mouse_released: #sparse [InputMouseButton]bool,
+	mouse_press_started: #sparse [Input_Mouse_Button]bool,
+	mouse_held: #sparse [Input_Mouse_Button]bool,
+	mouse_released: #sparse [Input_Mouse_Button]bool,
 
 	mouse_position: [2]f32,
 	mouse_move_delta: [2]f32,
 	mouse_scroll_delta: [2]f32,
 
-	events: [MAX_INPUT_EVENTS_PER_FRAME]InputEvent,
+	events: [MAX_INPUT_EVENTS_PER_FRAME]Input_Event,
 	event_count: int,
 
-    shutdown_requested: bool,
+	shutdown_requested: bool,
 }
 
 // Callback type for per-frame updates. The user_data is passed through from the platform.
@@ -60,42 +60,44 @@ init :: proc(max_windows: int = 1) {
 	arena_allocator := mem.arena_allocator(&platform.platform_arena)
 
 	state_size := PLATFORM_API.window_state_size()
-    platform.window_states = make([]byte, state_size * max_windows, arena_allocator)
-    platform.state_size = state_size
-    platform.max_windows = max_windows
+	platform.window_states = make([]byte, state_size * max_windows, arena_allocator)
+	platform.state_size = state_size
+	platform.max_windows = max_windows
 
 	platform.registry = new(Window_Registry, arena_allocator)
 	platform.registry^ = Window_Registry {
-		handle_to_id = make(map[WindowHandle]WindowID, arena_allocator),
-		id_to_handle = make(map[WindowID]WindowHandle, arena_allocator),
+		handle_to_id = make(map[Window_Handle]Window_ID, arena_allocator),
+		id_to_handle = make(map[Window_ID]Window_Handle, arena_allocator),
 	}
 
-    platform.frame_allocator = context.temp_allocator
+	platform.frame_allocator = context.temp_allocator
 }
 
 Window_Registry :: struct {
-    handle_to_id: map[WindowHandle]WindowID,
-    id_to_handle: map[WindowID]WindowHandle,
+	handle_to_id: map[Window_Handle]Window_ID,
+	id_to_handle: map[Window_ID]Window_Handle,
 }
 
 // Creates a new window and returns its ID.
-open_window :: proc(desc: WindowDescription) -> WindowID {
-    return PLATFORM_API.window_open(desc)
+open_window :: proc(desc: Window_Description) -> Window_ID {
+	return PLATFORM_API.window_open(desc)
 }
 
-register_window :: proc(window: WindowHandle, id: WindowID) {
-    platform.registry.handle_to_id[window] = id
-    platform.registry.id_to_handle[id] = window
+// Register window to the platform
+register_window :: proc(window: Window_Handle, id: Window_ID) {
+	platform.registry.handle_to_id[window] = id
+	platform.registry.id_to_handle[id] = window
 }
 
-lookup_window_id :: proc(window: WindowHandle) -> (WindowID, bool) {
-    return platform.registry.handle_to_id[window]
+// Window_ID from Window_Handle
+lookup_window_id :: proc(window: Window_Handle) -> (Window_ID, bool) {
+	return platform.registry.handle_to_id[window]
 }
 
 // Closes the window with the given ID.
-close_window :: proc(id: WindowID) {
-    assert(int(id) < platform.max_windows && int(id) >= 0, "Invalid WindowID")
-    PLATFORM_API.window_close(id)
+close_window :: proc(id: Window_ID) {
+	assert(int(id) < platform.max_windows && int(id) >= 0, "Invalid WindowID")
+	PLATFORM_API.window_close(id)
 }
 
 // Signals the platform to exit the main loop after the current frame.
@@ -105,52 +107,52 @@ application_request_shutdown :: #force_inline proc() {
 
 // Sets a callback to be invoked each frame. External libraries (e.g., renderers)
 // can use this to hook into the platform's main loop.
-set_frame_callback :: proc(id: WindowID, callback: FrameCallback, user_data: rawptr) {
-	header := cast(^WindowStateHeader)get_state_from_id(id)
+set_frame_callback :: proc(id: Window_ID, callback: FrameCallback, user_data: rawptr) {
+	header := cast(^Window_State_Header)get_state_from_id(id)
 	header.frame_callback = callback
 	header.user_data = user_data
 }
 
 // Changes the window title.
-set_window_title :: proc(id: WindowID, title: string) {
-	header := cast(^WindowStateHeader)get_state_from_id(id)
+set_window_title :: proc(id: Window_ID, title: string) {
+	header := cast(^Window_State_Header)get_state_from_id(id)
 	header.title = title
 	PLATFORM_API.set_window_title(id, title)
 }
 
 // Shows or hides the window.
-set_window_visible :: proc(id: WindowID, visible: bool) {
-	header := cast(^WindowStateHeader)get_state_from_id(id)
+set_window_visible :: proc(id: Window_ID, visible: bool) {
+	header := cast(^Window_State_Header)get_state_from_id(id)
 	header.is_visible = visible
 	PLATFORM_API.set_window_visible(id, visible)
 }
 
 // Sets the window display mode (windowed, maximized, fullscreen, etc.)
-set_window_mode :: proc(id: WindowID, mode: WindowDisplayMode) {
-	header := cast(^WindowStateHeader)get_state_from_id(id)
+set_window_mode :: proc(id: Window_ID, mode: Window_Display_Mode) {
+	header := cast(^Window_State_Header)get_state_from_id(id)
 	header.window_mode = mode
 	PLATFORM_API.set_window_mode(id, mode)
 }
 
 // Brings the window to front and gives it input focus.
-focus_window :: proc(id: WindowID) {
+focus_window :: proc(id: Window_ID) {
 	PLATFORM_API.focus_window(id)
 }
 
 // Returns the native window handle for use with external libraries.
-get_native_window_handle :: proc(id: WindowID) -> WindowHandle {
+get_native_window_handle :: proc(id: Window_ID) -> Window_Handle {
 	return PLATFORM_API.get_native_window_handle(id)
 }
 
 // Releases all platform resources.
 cleanup :: proc() {
-    for i := platform.max_windows - 1; i >= 0; i -= 1 {
-        header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
+	for i := platform.max_windows - 1; i >= 0; i -= 1 {
+		header := cast(^Window_State_Header)get_state_from_id(Window_ID(i))
         
-        if !header.is_alive {
-            continue
+		if !header.is_alive {
+			continue
         }
-        PLATFORM_API.window_close(WindowID(i))
+		PLATFORM_API.window_close(Window_ID(i))
     }
 
 	delete(platform.platform_arena.data)
@@ -168,16 +170,16 @@ platform_update :: proc() {
 	defer platform.event_count = 0
 
 	// Update windows
-	window_close_requested := make(map[WindowID]bool, allocator=platform.frame_allocator)
+	window_close_requested := make(map[Window_ID]bool, allocator=platform.frame_allocator)
 	for i in 0..<platform.max_windows {
-		header := cast(^WindowStateHeader)get_state_from_id(WindowID(i))
+		header := cast(^Window_State_Header)get_state_from_id(Window_ID(i))
 
 		if !header.is_alive {
 			continue
 		}
 
 		if header.close_requested {
-			window_close_requested[WindowID(i)] = true
+			window_close_requested[Window_ID(i)] = true
 		}
 	
 		if header.frame_callback != nil {
@@ -187,7 +189,7 @@ platform_update :: proc() {
 
 	// Close windows that requested shutdown
 	for id, state in window_close_requested {
-		header := cast(^WindowStateHeader)get_state_from_id(id)
+		header := cast(^Window_State_Header)get_state_from_id(id)
 
 		if .MainWindow in header.flags {
 			application_request_shutdown()
@@ -198,44 +200,44 @@ platform_update :: proc() {
 	}
 }
 
-PlatformAPI :: struct {
+Platform_API :: struct {
 	window_state_size: proc() -> int,
 
-	window_open:  proc(desc: WindowDescription) -> WindowID,
-	window_close: proc(id: WindowID),
+	window_open:  proc(desc: Window_Description) -> Window_ID,
+	window_close: proc(id: Window_ID),
 	
-	get_native_window_handle: proc(id: WindowID) -> WindowHandle,
+	get_native_window_handle: proc(id: Window_ID) -> Window_Handle,
 	
-	set_window_position: proc(id: WindowID, x, y: int),
-	set_window_size: proc(id: WindowID, w, h: int),
-	set_window_title: proc(id: WindowID, title: string),
-	set_window_visible: proc(id: WindowID, visible: bool),
-	set_window_minimized: proc(id: WindowID, minimized: bool),
-	set_window_mode: proc(id: WindowID, mode: WindowDisplayMode),
-	focus_window: proc(id: WindowID),
+	set_window_position: proc(id: Window_ID, x, y: int),
+	set_window_size: proc(id: Window_ID, w, h: int),
+	set_window_title: proc(id: Window_ID, title: string),
+	set_window_visible: proc(id: Window_ID, visible: bool),
+	set_window_minimized: proc(id: Window_ID, minimized: bool),
+	set_window_mode: proc(id: Window_ID, mode: Window_Display_Mode),
+	focus_window: proc(id: Window_ID),
 
 	process_events: proc(),
 
-	get_window_width: proc(id: WindowID) -> int,
-	get_window_height: proc(id: WindowID) -> int,
+	get_window_width: proc(id: Window_ID) -> int,
+	get_window_height: proc(id: Window_ID) -> int,
 }
 
-WindowID :: distinct u32
-WindowHandle :: distinct uintptr
+Window_ID :: distinct u32
+Window_Handle :: distinct uintptr
 
-WindowDisplayMode :: enum {
+Window_Display_Mode :: enum {
 	Windowed,
 	Fullscreen,
 	BorderlessFullscreen,
 }
 
-WindowDescription :: struct {
+Window_Description :: struct {
 	x: int,
 	y: int,
 	width: int,
 	height: int,
 	title: string,
-	flags: WindowFlags,
+	flags: Window_Flags,
 
 	// Size constraints (0 = no constraint)
 	min_width: int,
@@ -247,8 +249,8 @@ WindowDescription :: struct {
 	aspect_ratio: f32,
 }
 
-WindowFlags :: bit_set[WindowFlag]
-WindowFlag :: enum {
+Window_Flags :: bit_set[Window_Flag]
+Window_Flag :: enum {
 	MainWindow,      // Closing this window shuts down the application
 	CenterOnOpen,    // Center window on screen when opened
 	Resizable,       // Window can be resized by user
@@ -259,8 +261,8 @@ WindowFlag :: enum {
 	AlwaysOnTop,     // Window stays above other windows
 }
 
-WindowStateHeader :: struct {
-	id: WindowID,
+Window_State_Header :: struct {
+	id: Window_ID,
 	is_alive: bool,
 	close_requested: bool,
 	
@@ -274,8 +276,8 @@ WindowStateHeader :: struct {
 	is_visible: bool,
 	is_focused: bool,
 	is_minimized: bool,
-	window_mode: WindowDisplayMode,
-	flags: WindowFlags,
+	window_mode: Window_Display_Mode,
+	flags: Window_Flags,
 	
 	// User-provided callback invoked each frame. External libraries
 	// can set this to hook into the platform's main loop.
@@ -285,38 +287,38 @@ WindowStateHeader :: struct {
 
 // Returns true if the window state is currently in use.
 is_state_alive :: proc(state: rawptr) -> bool {
-    header := cast(^WindowStateHeader)state
-    return header.is_alive
+	header := cast(^Window_State_Header)state
+	return header.is_alive
 }
 
 // Returns the first alive window state and its ID. Panics if none exist.
-get_first_alive_state :: proc() -> (state: rawptr, id: WindowID) {
+get_first_alive_state :: proc() -> (state: rawptr, id: Window_ID) {
 	for i in 0..<platform.max_windows {
-        state_ptr := get_state_from_id(WindowID(i))
-        if is_state_alive(state_ptr) {
-        	return state_ptr, WindowID(i)
+		state_ptr := get_state_from_id(Window_ID(i))
+		if is_state_alive(state_ptr) {
+			return state_ptr, Window_ID(i)
         }
     }
-    log.panic("All window states are dead!")
+	log.panic("All window states are dead!")
 }
 
 // Returns an unused window state slot and its ID. Panics if all slots are in use.
-get_free_state :: proc() -> (state: rawptr, id: WindowID) {
-    for i in 0..<platform.max_windows {
-        state_ptr := get_state_from_id(WindowID(i))
-        if !is_state_alive(state_ptr) {
-            return state_ptr, WindowID(i)
+get_free_state :: proc() -> (state: rawptr, id: Window_ID) {
+	for i in 0..<platform.max_windows {
+		state_ptr := get_state_from_id(Window_ID(i))
+		if !is_state_alive(state_ptr) {
+			return state_ptr, Window_ID(i)
         }
     }
-    log.panic("All window states are in use!")
+	log.panic("All window states are in use!")
 }
 
 // Returns the window state for the given ID.
-get_state_from_id :: proc(id: WindowID) -> rawptr {
-    assert(int(id) < platform.max_windows && int(id) >= 0, "Invalid WindowID")
+get_state_from_id :: proc(id: Window_ID) -> rawptr {
+	assert(int(id) < platform.max_windows && int(id) >= 0, "Invalid WindowID")
     
-    offset := platform.state_size * int(id)
-    return raw_data(platform.window_states[offset:])
+	offset := platform.state_size * int(id)
+	return raw_data(platform.window_states[offset:])
 }
 
 /////////////////////////////////////////////////////
@@ -334,37 +336,37 @@ input_reset_state :: proc() {
 }
 
 // Returns true if the key was pressed this frame.
-input_key_went_down :: proc "contextless" (key: InputKeyboardKey) -> bool {
+input_key_went_down :: proc "contextless" (key: Input_Keyboard_Key) -> bool {
 	return platform.keys_press_started[key]
 }
 
 // Returns true if the key was released this frame.
-input_key_went_up :: proc "contextless" (key: InputKeyboardKey) -> bool {
+input_key_went_up :: proc "contextless" (key: Input_Keyboard_Key) -> bool {
 	return platform.keys_released[key]
 }
 
 // Returns true if the key is currently held down.
-input_key_is_held :: proc "contextless" (key: InputKeyboardKey) -> bool {
+input_key_is_held :: proc "contextless" (key: Input_Keyboard_Key) -> bool {
 	return platform.keys_held[key]
 }
 
 // Returns true if the mouse button was pressed this frame.
-input_mouse_button_went_down :: proc "contextless" (button: InputMouseButton) -> bool {
+input_mouse_button_went_down :: proc "contextless" (button: Input_Mouse_Button) -> bool {
 	return platform.mouse_press_started[button]
 }
 
 // Returns true if the mouse button was released this frame.
-input_mouse_button_went_up :: proc "contextless" (button: InputMouseButton) -> bool {
+input_mouse_button_went_up :: proc "contextless" (button: Input_Mouse_Button) -> bool {
 	return platform.mouse_released[button]
 }
 
 // Returns true if the mouse button is currently held down.
-input_mouse_button_is_held :: proc "contextless" (button: InputMouseButton) -> bool {
+input_mouse_button_is_held :: proc "contextless" (button: Input_Mouse_Button) -> bool {
 	return platform.mouse_held[button]
 }
 
 // Returns the scroll delta magnitude for the given direction this frame.
-input_scroll_magnitude :: proc "contextless" (direction: InputScrollDirection) -> f32 {
+input_scroll_magnitude :: proc "contextless" (direction: Input_Scroll_Direction) -> f32 {
 	if direction == .X {
 		return f32(platform.mouse_scroll_delta.x)
 	} else if direction == .Y {
@@ -375,7 +377,7 @@ input_scroll_magnitude :: proc "contextless" (direction: InputScrollDirection) -
 }
 
 // Returns the scroll delta as a 2D vector for the given direction this frame.
-input_scroll_vector :: proc "contextless" (direction: InputScrollDirection) -> [2]f32 {
+input_scroll_vector :: proc "contextless" (direction: Input_Scroll_Direction) -> [2]f32 {
 	if direction == .X {
 		return {1, 0} * f32(platform.mouse_scroll_delta.x)
 	} else if direction == .Y {
@@ -391,7 +393,7 @@ input_mouse_position :: proc "contextless" () -> [2]f32 {
 }
 
 // Returns the mouse movement delta magnitude for the given direction this frame.
-input_mouse_delta :: proc "contextless" (direction: InputScrollDirection) -> f32 {
+input_mouse_delta :: proc "contextless" (direction: Input_Scroll_Direction) -> f32 {
 	if direction == .X {
 		return f32(platform.mouse_move_delta.x)
 	} else if direction == .Y {
@@ -402,7 +404,7 @@ input_mouse_delta :: proc "contextless" (direction: InputScrollDirection) -> f32
 }
 
 // Returns the mouse movement delta as a 2D vector for the given direction this frame.
-input_mouse_delta_vector :: proc "contextless" (direction: InputScrollDirection) -> [2]f32 {
+input_mouse_delta_vector :: proc "contextless" (direction: Input_Scroll_Direction) -> [2]f32 {
 	if direction == .X {
 		return {1, 0} * f32(platform.mouse_move_delta.x)
 	} else if direction == .Y {
@@ -412,7 +414,7 @@ input_mouse_delta_vector :: proc "contextless" (direction: InputScrollDirection)
 	}
 }
 
-InputScrollDirection :: enum {
+Input_Scroll_Direction :: enum {
 	X,
 	Y,
 	Both,
@@ -421,24 +423,24 @@ InputScrollDirection :: enum {
 MAX_INPUT_EVENTS_PER_FRAME :: 128
 
 // Pushes a new event to the event queue. Used internally by platform backends.
-InputEvent :: union {
-	KeyPressedEvent,
-	KeyReleasedEvent,
+Input_Event :: union {
+	Key_Pressed_Event,
+	Key_Released_Event,
 
-	MousePressedEvent,
-	MouseReleasedEvent,
-	MousePositionEvent,
-	MouseScrollEvent,
+	Mouse_Pressed_Event,
+	Mouse_Released_Event,
+	Mouse_Position_Event,
+	Mouse_Scroll_Event,
 }
 
-KeyPressedEvent    :: struct { key: InputKeyboardKey }
-KeyReleasedEvent   :: struct { key: InputKeyboardKey }
-MousePressedEvent  :: struct { button: InputMouseButton }
-MouseReleasedEvent :: struct { button: InputMouseButton }
-MousePositionEvent :: struct { x, y: f64 }
-MouseScrollEvent   :: struct { x, y: f64 }
+Key_Pressed_Event    :: struct { key: Input_Keyboard_Key }
+Key_Released_Event   :: struct { key: Input_Keyboard_Key }
+Mouse_Pressed_Event  :: struct { button: Input_Mouse_Button }
+Mouse_Released_Event :: struct { button: Input_Mouse_Button }
+Mouse_Position_Event :: struct { x, y: f64 }
+Mouse_Scroll_Event   :: struct { x, y: f64 }
 
-emit_input_event :: proc "contextless" (event: InputEvent) {
+emit_input_event :: proc "contextless" (event: Input_Event) {
 	if platform.event_count == MAX_INPUT_EVENTS_PER_FRAME - 1 {
 		return
 	}
@@ -448,30 +450,30 @@ emit_input_event :: proc "contextless" (event: InputEvent) {
 
 	switch e in event {
 
-		case KeyPressedEvent:
+		case Key_Pressed_Event:
 			platform.keys_press_started[e.key] = platform.keys_held[e.key] ~ true
 			platform.keys_held[e.key] = true
-		case KeyReleasedEvent:
+		case Key_Released_Event:
 			platform.keys_released[e.key] = true
 			platform.keys_held[e.key] = false
 			
-		case MousePressedEvent:
+		case Mouse_Pressed_Event:
 			platform.mouse_press_started[e.button] = platform.mouse_held[e.button] ~ true
 			platform.mouse_held[e.button] = true
-		case MouseReleasedEvent:
+		case Mouse_Released_Event:
 			platform.mouse_released[e.button] = true
 			platform.mouse_held[e.button] = false
 
-		case MousePositionEvent:
+		case Mouse_Position_Event:
 			platform.mouse_move_delta = {f32(e.x) - platform.mouse_position.x, f32(e.y) - platform.mouse_position.y}
 			platform.mouse_position = {f32(e.x), f32(e.y)}
 		
-		case MouseScrollEvent:
+		case Mouse_Scroll_Event:
 			platform.mouse_scroll_delta = {f32(e.x), f32(e.y)}
 	}
 }
 
-PlatformEvent :: enum {
+Platform_Event :: enum {
 	DidBecomeActive,
 	DidResignActive,
 	ShouldTerminate,
@@ -480,11 +482,11 @@ PlatformEvent :: enum {
 	DidUnhide,
 }
 
-PlatformEventReply :: union {
+Platform_Event_Reply :: union {
 	bool,
 }
 
-emit_platform_event :: proc(event: PlatformEvent) -> (reply: PlatformEventReply) {
+emit_platform_event :: proc(event: Platform_Event) -> (reply: Platform_Event_Reply) {
 	switch event {
 		case .DidBecomeActive:
 			platform.is_active = true
@@ -502,53 +504,53 @@ emit_platform_event :: proc(event: PlatformEvent) -> (reply: PlatformEventReply)
 	return
 }
 
-WindowEvent :: union {
-	DidChangeOcclusionState,
-	WindowShouldClose,
-	WindowDidResize,
-	WindowDidMove,
-	WindowChangeKeyState,
-	WindowChangeMiniaturizeState,
-	WindowChangeFullScreenState,
+Window_Event :: union {
+	Window_Did_Change_Occlusion_State,
+	Window_Should_Close,
+	Window_Did_Resize,
+	Window_Did_Move,
+	Window_Change_Key_State,
+	Window_Change_Miniaturize_State,
+	Window_Change_Full_Screen_State,
 }
 
-DidChangeOcclusionState 	 :: struct { sender: WindowID, state: bool }
-WindowShouldClose 			 :: struct { sender: WindowID }
-WindowDidResize 			 :: struct { sender: WindowID, size: [2]int }
-WindowDidMove 				 :: struct { sender: WindowID, position: [2]int }
-WindowChangeKeyState 		 :: struct { sender: WindowID, state: bool }
-WindowChangeMiniaturizeState :: struct { sender: WindowID, state: bool }
-WindowChangeFullScreenState  :: struct { sender: WindowID, state: bool }
+Window_Did_Change_Occlusion_State :: struct { sender: Window_ID, state: bool }
+Window_Should_Close               :: struct { sender: Window_ID }
+Window_Did_Resize                 :: struct { sender: Window_ID, size: [2]int }
+Window_Did_Move                   :: struct { sender: Window_ID, position: [2]int }
+Window_Change_Key_State           :: struct { sender: Window_ID, state: bool }
+Window_Change_Miniaturize_State   :: struct { sender: Window_ID, state: bool }
+Window_Change_Full_Screen_State   :: struct { sender: Window_ID, state: bool }
 
-emit_window_event :: proc(event: WindowEvent) {
+emit_window_event :: proc(event: Window_Event) {
 	switch e in event {
-		case DidChangeOcclusionState:
-			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+		case Window_Did_Change_Occlusion_State:
+			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.is_visible = e.state
-		case WindowShouldClose:
-			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+		case Window_Should_Close:
+			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.close_requested = true
-		case WindowDidResize:
-			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+		case Window_Did_Resize:
+			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.width = e.size.x
 			state.height = e.size.y
-		case WindowDidMove:
-			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+		case Window_Did_Move:
+			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.x = e.position.x
 			state.y = e.position.y
-		case WindowChangeKeyState:
-			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+		case Window_Change_Key_State:
+			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.is_focused = e.state
-		case WindowChangeMiniaturizeState:
-			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+		case Window_Change_Miniaturize_State:
+			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.is_minimized = e.state
-		case WindowChangeFullScreenState:
-			state := cast(^WindowStateHeader)get_state_from_id(e.sender)
+		case Window_Change_Full_Screen_State:
+			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.window_mode = .Fullscreen if e.state else .Windowed
 	}
 }
 
-InputMouseButton :: enum {
+Input_Mouse_Button :: enum {
 	Left 	= 0,
 	Right 	= 1,
 	Middle 	= 2,
@@ -581,10 +583,10 @@ InputMouseButton :: enum {
 	MouseOther_26 = 28,
 	MouseOther_27 = 29,
 	MouseOther_28 = 30,
-	MouseOther_29 = 31
+	MouseOther_29 = 31,
 }
 
-InputKeyboardKey :: enum {
+Input_Keyboard_Key :: enum {
 	None				= 0x00,
 	N0					= 0x01,
 	N1					= 0x02,

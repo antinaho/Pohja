@@ -6,7 +6,7 @@ package pohja
 import NS "core:sys/darwin/Foundation"
 
 @(private="package")
-DARWIN_PLATFORM_API :: PlatformAPI {
+DARWIN_PLATFORM_API :: Platform_API {
 	window_state_size = window_state_size_darwin,
 	window_open = window_open_darwin,
 	window_close = window_close_darwin,
@@ -23,14 +23,14 @@ DARWIN_PLATFORM_API :: PlatformAPI {
 	get_window_height = get_window_height_darwin,
 }
 
-get_window_width_darwin :: proc(id: WindowID) -> int {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+get_window_width_darwin :: proc(id: Window_ID) -> int {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	frame := state.window->frame()
 	return int(frame.width)
 }
 
-get_window_height_darwin :: proc(id: WindowID) -> int {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+get_window_height_darwin :: proc(id: Window_ID) -> int {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	frame := state.window->frame()
 	return int(frame.height)
 }
@@ -46,23 +46,23 @@ process_events_darwin :: proc() {
 		
 		#partial switch event->type() {
 			case .KeyDown:
-				emit_input_event(KeyPressedEvent{key=code_to_keyboard_key[event->keyCode()]})
+				emit_input_event(Key_Pressed_Event{key=code_to_keyboard_key[event->keyCode()]})
 			case .KeyUp:
-				emit_input_event(KeyReleasedEvent{key=code_to_keyboard_key[event->keyCode()]})
+				emit_input_event(Key_Released_Event{key=code_to_keyboard_key[event->keyCode()]})
 			
 			case .LeftMouseDown, .RightMouseDown, .OtherMouseDown:
 				btn_n := event->buttonNumber()
-				emit_input_event(MousePressedEvent{button=code_to_mouse_button[int(btn_n)]})
+				emit_input_event(Mouse_Pressed_Event{button=code_to_mouse_button[int(btn_n)]})
 			case .LeftMouseUp, .RightMouseUp, .OtherMouseUp:
 				btn_n := event->buttonNumber()
-				emit_input_event(MouseReleasedEvent{button=code_to_mouse_button[int(btn_n)]})
+				emit_input_event(Mouse_Released_Event{button=code_to_mouse_button[int(btn_n)]})
 
 			case .MouseMoved, .LeftMouseDragged, .RightMouseDragged, .OtherMouseDragged:
 				position := event->locationInWindow()				
-				emit_input_event(MousePositionEvent{x=f64(position.x), y=f64(position.y)})
+				emit_input_event(Mouse_Position_Event{x=f64(position.x), y=f64(position.y)})
 			case .ScrollWheel:
 				scroll_x, scroll_y := event->scrollingDelta()
-				emit_input_event(MouseScrollEvent{x=f64(scroll_x), y=f64(scroll_y)})
+				emit_input_event(Mouse_Scroll_Event{x=f64(scroll_x), y=f64(scroll_y)})
 			case .MouseEntered:
 			case .MouseExited:
 			// TODO implement touch "pointer" cases
@@ -71,7 +71,7 @@ process_events_darwin :: proc() {
 	}
 }
 
-code_to_mouse_button := [64]InputMouseButton {
+code_to_mouse_button := [64]Input_Mouse_Button {
 	0  = .Left,
 	1  = .Right,
 	2  = .Middle,
@@ -103,10 +103,10 @@ code_to_mouse_button := [64]InputMouseButton {
 	28 = .MouseOther_26,
 	29 = .MouseOther_27,
 	30 = .MouseOther_28,
-	31 = .MouseOther_29
+	31 = .MouseOther_29,
 }
 
-code_to_keyboard_key := [255]InputKeyboardKey {
+code_to_keyboard_key := [255]Input_Keyboard_Key {
 	NS.kVK.ANSI_1 				= .N1,
 	NS.kVK.ANSI_2 				= .N2,
 	NS.kVK.ANSI_3 				= .N3,
@@ -228,21 +228,21 @@ code_to_keyboard_key := [255]InputKeyboardKey {
 	NS.kVK.ISO_Section 			= .ISO_Section,
 }
 
-set_window_position_darwin :: proc(id: WindowID, x, y: int) {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+set_window_position_darwin :: proc(id: Window_ID, x, y: int) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.x = x
 	state.y = y
 
 	point := NS.Point {
 		x = NS.Float(x),
-		y = NS.Float(y)
+		y = NS.Float(y),
 	}
 
 	state.window->setFrameOrigin(point)
 } 
 
-set_window_size_darwin :: proc(id: WindowID, w, h: int) {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+set_window_size_darwin :: proc(id: Window_ID, w, h: int) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 
 	frame := state.window->frame()
 	frame.size = {
@@ -253,15 +253,15 @@ set_window_size_darwin :: proc(id: WindowID, w, h: int) {
 	state.window->setFrame(frame, false)
 }
 
-set_window_title_darwin :: proc(id: WindowID, title: string) {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+set_window_title_darwin :: proc(id: Window_ID, title: string) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	ns_title := NS.alloc(NS.String)->initWithOdinString(title)
 	defer ns_title->release()
 	state.window->setTitle(ns_title)
 }
 
-set_window_visible_darwin :: proc(id: WindowID, visible: bool) {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+set_window_visible_darwin :: proc(id: Window_ID, visible: bool) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	if visible {
 		state.window->orderFront(nil)
 	} else {
@@ -269,8 +269,8 @@ set_window_visible_darwin :: proc(id: WindowID, visible: bool) {
 	}
 }
 
-set_window_minimized_darwin :: proc(id: WindowID, minimized: bool) {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+set_window_minimized_darwin :: proc(id: Window_ID, minimized: bool) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	if minimized {
 		state.window->setIsMiniaturized(true)
 	} else {
@@ -278,8 +278,8 @@ set_window_minimized_darwin :: proc(id: WindowID, minimized: bool) {
 	}
 }
 
-set_window_mode_darwin :: proc(id: WindowID, new_mode: WindowDisplayMode) {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+set_window_mode_darwin :: proc(id: Window_ID, new_mode: Window_Display_Mode) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	prev_mode := state.window_mode
 
 	if new_mode == prev_mode {
@@ -303,40 +303,40 @@ set_window_mode_darwin :: proc(id: WindowID, new_mode: WindowDisplayMode) {
 	}
 }
 
-focus_window_darwin :: proc(id: WindowID) {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
+focus_window_darwin :: proc(id: Window_ID) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.window->makeKeyAndOrderFront(nil)
 }
 
-get_native_window_handle_darwin :: proc(id: WindowID) -> WindowHandle {
-	state := cast(^DarwinWindowState)get_state_from_id(id)
-	return cast(WindowHandle)state.window
+get_native_window_handle_darwin :: proc(id: Window_ID) -> Window_Handle {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return cast(Window_Handle)state.window
 }
 
-window_close_darwin :: proc(id: WindowID) {
-    state := cast(^DarwinWindowState)get_state_from_id(id)
+window_close_darwin :: proc(id: Window_ID) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
     
-    state.window->close()
+	state.window->close()
 
-    state.is_alive = false
+	state.is_alive = false
 }
 
-DarwinWindowState :: struct {
-	using header : WindowStateHeader,
+Darwin_Window_State :: struct {
+	using header : Window_State_Header,
 
 	application: ^NS.Application,
 	window: ^NS.Window,
 }
 
 window_state_size_darwin :: proc() -> int {
-	return size_of(DarwinWindowState)
+	return size_of(Darwin_Window_State)
 }
 
-window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
-    state, id := get_free_state()
-    darwin_state := cast(^DarwinWindowState)state
+window_open_darwin :: proc(desc: Window_Description) -> Window_ID {
+	state, id := get_free_state()
+	darwin_state := cast(^Darwin_Window_State)state
 
-	darwin_state^ = DarwinWindowState {
+	darwin_state^ = Darwin_Window_State {
 		application = NS.Application.sharedApplication(),
 		window = NS.Window_alloc(),
 		x = desc.x,
@@ -351,30 +351,30 @@ window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
 	
 	NS.Application.sharedApplication()->setActivationPolicy(.Regular)
 
-	application_delegate_cls := NS.application_delegate_register_and_alloc(ApplicationDelegateTemplate, "MyApplicationDelegate", context)
+	application_delegate_cls := NS.application_delegate_register_and_alloc(Application_Delegate_Template, "MyApplicationDelegate", context)
 	NS.Application.sharedApplication()->setDelegate(application_delegate_cls)
 
 	rect := NS.Rect {
 		origin = {NS.Float(desc.x), NS.Float(desc.y)},
-		size = {NS.Float(desc.width), NS.Float(desc.height)}
+		size = {NS.Float(desc.width), NS.Float(desc.height)},
 	}
 
 	darwin_state.window->initWithContentRect(rect, {.Resizable, .Closable, .Titled, .Miniaturizable}, .Buffered, false)
 	darwin_state.window->setReleasedWhenClosed(true)
 
-	register_window(cast(WindowHandle)darwin_state.window, id)
+	register_window(cast(Window_Handle)darwin_state.window, id)
 
 	set_window_title(id, desc.title)
 	
 	darwin_state.window->setBackgroundColor(NS.Color_purpleColor())
 
-    darwin_state.window->makeKeyAndOrderFront(nil)
+	darwin_state.window->makeKeyAndOrderFront(nil)
 
-    if .CenterOnOpen in desc.flags {
-        darwin_state.window->center()
+	if .CenterOnOpen in desc.flags {
+		darwin_state.window->center()
     }
 	
-	window_delegate_cls := NS.window_delegate_register_and_alloc(WindowDelegateTemplate, "MyWindowDelegate", context)
+	window_delegate_cls := NS.window_delegate_register_and_alloc(Window_Delegate_Template, "MyWindowDelegate", context)
 	darwin_state.window->setDelegate(window_delegate_cls)
 	
 	//NS.Application.sharedApplication()->activateIgnoringOtherApps(true)
@@ -386,13 +386,13 @@ window_open_darwin :: proc(desc: WindowDescription) -> WindowID {
 
 // APPLICATION DELEGATE
 
-ApplicationDelegateTemplate :: NS.ApplicationDelegateTemplate {
-	applicationDidBecomeActive = application_did_become_active,
-	applicationDidResignActive = application_did_resign_active,
-	applicationShouldTerminate = application_should_terminate,
+Application_Delegate_Template :: NS.ApplicationDelegateTemplate {
+	applicationDidBecomeActive                      = application_did_become_active,
+	applicationDidResignActive                      = application_did_resign_active,
+	applicationShouldTerminate                      = application_should_terminate,
 	applicationShouldTerminateAfterLastWindowClosed = application_should_terminate_after_last_window_closed,
-	applicationDidHide = application_did_hide,
-	applicationDidUnhide = application_did_unhide,
+	applicationDidHide                              = application_did_hide,
+	applicationDidUnhide                            = application_did_unhide,
 }
 
 application_did_become_active :: proc(notification: ^NS.Notification) { emit_platform_event(.DidBecomeActive) }
@@ -420,7 +420,7 @@ application_did_unhide :: proc(notification: ^NS.Notification) {
 
 // WINDOW DELEGATE
 
-WindowDelegateTemplate :: NS.WindowDelegateTemplate {
+Window_Delegate_Template :: NS.WindowDelegateTemplate {
 	windowDidChangeOcclusionState = window_did_change_occlusion_state, 
 	windowShouldClose = window_should_close,
 	windowDidResize = window_did_resize,
@@ -435,17 +435,17 @@ WindowDelegateTemplate :: NS.WindowDelegateTemplate {
 
 window_did_change_occlusion_state :: proc(notification: ^NS.Notification) {
 	sender_window := cast(^NS.Window)notification->object()
-	window_id := platform.registry.handle_to_id[cast(WindowHandle)sender_window]
+	window_id := platform.registry.handle_to_id[cast(Window_Handle)sender_window]
 	occlusion_state := sender_window->occlusionStateVisible()
-	emit_window_event(DidChangeOcclusionState{
+	emit_window_event(Window_Did_Change_Occlusion_State{
 		sender = window_id,
 		state = bool(occlusion_state),
 	})
 }
 
 window_should_close :: proc(window: ^NS.Window) -> NS.BOOL {
-	window_id := platform.registry.handle_to_id[cast(WindowHandle)window]
-	emit_window_event(WindowShouldClose{
+	window_id := platform.registry.handle_to_id[cast(Window_Handle)window]
+	emit_window_event(Window_Should_Close{
 		sender = window_id,
 	})
 	return false
@@ -454,65 +454,65 @@ window_should_close :: proc(window: ^NS.Window) -> NS.BOOL {
 window_did_resize :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
 	size := window->frame().size
-	emit_window_event(WindowDidResize{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		size = {int(size.width), int(size.height)}
+	emit_window_event(Window_Did_Resize{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		size = {int(size.width), int(size.height)},
 	})
 }
 
 window_did_move :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
 	position := window->frame().origin
-	emit_window_event(WindowDidMove{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		position = {int(position.x), int(position.x)}
+	emit_window_event(Window_Did_Move{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		position = {int(position.x), int(position.x)},
 	})
 }
 
 window_did_become_key :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
-	emit_window_event(WindowChangeKeyState{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		state = true
+	emit_window_event(Window_Change_Key_State{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		state = true,
 	})
 }
 
 window_did_resign_key :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
-	emit_window_event(WindowChangeKeyState{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		state = false
+	emit_window_event(Window_Change_Key_State{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		state = false,
 	})
 }
 
 window_did_miniaturize :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
-	emit_window_event(WindowChangeMiniaturizeState{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		state = true
+	emit_window_event(Window_Change_Miniaturize_State{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		state = true,
 	})
 }
 
 window_did_deminiaturize :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
-	emit_window_event(WindowChangeMiniaturizeState{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		state = false
+	emit_window_event(Window_Change_Miniaturize_State{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		state = false,
 	})
 }
 
 window_did_enter_full_screen :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
-	emit_window_event(WindowChangeFullScreenState{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		state = true
+	emit_window_event(Window_Change_Full_Screen_State{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		state = true,
 	})
 }
 
 window_did_exit_full_screen :: proc(notification: ^NS.Notification) {
 	window := cast(^NS.Window)notification->object()
-	emit_window_event(WindowChangeFullScreenState{
-		sender = platform.registry.handle_to_id[cast(WindowHandle)window],
-		state = false
+	emit_window_event(Window_Change_Full_Screen_State{
+		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
+		state = false,
 	})
 }
