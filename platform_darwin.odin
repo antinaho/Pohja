@@ -21,6 +21,7 @@ DARWIN_PLATFORM_API :: Platform_API {
 	process_events = process_events_darwin,
 	get_window_width = get_window_width_darwin,
 	get_window_height = get_window_height_darwin,
+	get_window_size = get_window_size_darwin,
 }
 
 get_window_width_darwin :: proc(id: Window_ID) -> int {
@@ -33,6 +34,12 @@ get_window_height_darwin :: proc(id: Window_ID) -> int {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	frame := state.window->frame()
 	return int(frame.height)
+}
+
+get_window_size_darwin :: proc(id: Window_ID) -> [2]int {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	frame := state.window->frame()
+	return {int(frame.width), int(frame.height)}
 }
 
 process_events_darwin :: proc() {

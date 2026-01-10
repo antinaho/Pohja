@@ -6,11 +6,11 @@ main :: proc() {
         width = 600,
         height = 600,
         title = "Hellope",
-        flags = {.MainWindow, .Resizable, .Decorated},
+        flags = {.MainWindow, .CenterOnOpen, .Resizable, .Decorated},
     })
 
     for !platform_should_close() {
         platform_update()
-    }
+    }    
     cleanup()
 }

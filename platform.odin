@@ -218,6 +218,7 @@ Platform_API :: struct {
 
 	process_events: proc(),
 
+	get_window_size: proc(id: Window_ID) -> [2]int,
 	get_window_width: proc(id: Window_ID) -> int,
 	get_window_height: proc(id: Window_ID) -> int,
 }
