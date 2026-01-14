@@ -46,9 +46,6 @@ Platform :: struct {
 	shutdown_requested: bool,
 }
 
-// Callback type for per-frame updates. The user_data is passed through from the platform.
-FrameCallback :: proc(user_data: rawptr)
-
 // Initializes the platform. Call before any other platform procedures.
 init :: proc(max_windows: int = 1) {
 	assert(max_windows >= 1, "Need at least 1 window!")
@@ -103,14 +100,6 @@ close_window :: proc(id: Window_ID) {
 // Signals the platform to exit the main loop after the current frame.
 application_request_shutdown :: #force_inline proc() {
 	platform.shutdown_requested = true
-}
-
-// Sets a callback to be invoked each frame. External libraries (e.g., renderers)
-// can use this to hook into the platform's main loop.
-set_frame_callback :: proc(id: Window_ID, callback: FrameCallback, user_data: rawptr) {
-	header := cast(^Window_State_Header)get_state_from_id(id)
-	header.frame_callback = callback
-	header.user_data = user_data
 }
 
 // Changes the window title.
@@ -180,10 +169,6 @@ platform_update :: proc() {
 
 		if header.close_requested {
 			window_close_requested[Window_ID(i)] = true
-		}
-	
-		if header.frame_callback != nil {
-			header.frame_callback(header.user_data)
 		}
 	}
 
@@ -279,11 +264,6 @@ Window_State_Header :: struct {
 	is_minimized: bool,
 	window_mode: Window_Display_Mode,
 	flags: Window_Flags,
-	
-	// User-provided callback invoked each frame. External libraries
-	// can set this to hook into the platform's main loop.
-	frame_callback: FrameCallback,
-	user_data: rawptr,
 }
 
 // Returns true if the window state is currently in use.
@@ -421,9 +401,8 @@ Input_Scroll_Direction :: enum {
 	Both,
 }
 
-MAX_INPUT_EVENTS_PER_FRAME :: 128
+MAX_INPUT_EVENTS_PER_FRAME :: 256
 
-// Pushes a new event to the event queue. Used internally by platform backends.
 Input_Event :: union {
 	Key_Pressed_Event,
 	Key_Released_Event,

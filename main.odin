@@ -1,5 +1,6 @@
 package pohja
 
+// For testing, should never be ran itself
 main :: proc() {
     init(1)
     id := open_window(Window_Description{
