@@ -43,7 +43,17 @@ Platform :: struct {
 	event_count: int,
 
 	shutdown_requested: bool,
+	is_cursor_hidden: bool,
+
+	is_cursor_locked: bool,
+	cursor_locked_window: Window_Handle,
+
+	runtime:        f64,
+	delta_time:     f64,
+	_previous_time: time.Tick,
 }
+
+import "core:time"
 
 // Initializes the platform. Call before any other platform procedures.
 platform_init :: proc(max_windows: int = 1) {
@@ -65,17 +75,18 @@ platform_init :: proc(max_windows: int = 1) {
 		handle_to_id = make(map[Window_Handle]Window_ID, arena_allocator),
 		id_to_handle = make(map[Window_ID]Window_Handle, arena_allocator),
 	}
-
+	platform._previous_time = time.tick_now()
 	platform.frame_allocator = context.temp_allocator
 }
+
+
 
 Window_Registry :: struct {
 	handle_to_id: map[Window_Handle]Window_ID,
 	id_to_handle: map[Window_ID]Window_Handle,
 }
 
-
-
+// TODO just rewrite this whole registry thing so something else (maybe?)
 // Register window to the platform
 _register_window :: proc(window: Window_Handle, id: Window_ID) {
 	platform.registry.handle_to_id[window] = id
@@ -116,11 +127,19 @@ platform_should_close :: proc() -> bool {
 }
 
 platform_update :: proc() -> bool {
+	if platform_should_close() {
+		return false
+	}
+
 	free_all(platform.frame_allocator)
 
 	input_reset_state()
 	PLATFORM_API.process_events()
 	defer platform.event_count = 0
+
+	platform.delta_time = time.duration_seconds(time.tick_since(platform._previous_time))
+	platform.runtime += platform.delta_time
+	platform._previous_time = time.tick_now()
 
 	// Update windows
 	window_close_requested := make(map[Window_ID]bool, allocator=platform.frame_allocator)
@@ -207,6 +226,13 @@ get_clipboard_text :: proc() -> string   { return PLATFORM_API.get_clipboard_tex
 set_window_min_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_min_size(id, width, height) }
 set_window_max_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_max_size(id, width, height) }
 
+show_cursor :: proc() { PLATFORM_API.show_cursor() }
+hide_cursor :: proc() { PLATFORM_API.hide_cursor() }
+is_cursor_hidden :: proc() -> bool { return platform.is_cursor_hidden }
+
+//cursor_lock_to_window ::     proc(id: Window_ID)         { PLATFORM_API.cursor_lock_to_window(id) }
+//cursor_unlock_from_window :: proc(id: Window_ID)         { PLATFORM_API.cursor_unlock_from_window(id) }
+is_cursor_on_window ::       proc(id: Window_ID) -> bool { return PLATFORM_API.is_cursor_on_window(id) }
 
 Platform_API :: struct {
 	window_state_size: proc() -> int,
@@ -255,6 +281,12 @@ Platform_API :: struct {
 	//set_window_opacity:   proc(id: Window_ID, opacity: f32),
 	
 	process_events: proc(),
+
+	show_cursor: proc(),
+	hide_cursor: proc(),
+	cursor_lock_to_window: proc(id: Window_ID),
+	cursor_unlock_from_window: proc(id: Window_ID),
+	is_cursor_on_window: proc(id: Window_ID) -> bool,
 }
 
 Window_ID :: distinct u32
@@ -445,7 +477,7 @@ Mouse_Released_Event :: struct { button: Input_Mouse_Button }
 Mouse_Position_Event :: struct { x, y: f64 }
 Mouse_Scroll_Event   :: struct { x, y: f64 }
 
-emit_input_event :: proc "contextless" (event: Input_Event) {
+emit_input_event :: proc (event: Input_Event) {
 	if platform.event_count == MAX_INPUT_EVENTS_PER_FRAME - 1 {
 		return
 	}

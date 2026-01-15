@@ -4,6 +4,7 @@
 package pohja
 
 import NS "core:sys/darwin/Foundation"
+import C "core:sys/darwin/CoreFoundation"
 
 @(private="package")
 DARWIN_PLATFORM_API :: Platform_API {
@@ -52,7 +53,54 @@ DARWIN_PLATFORM_API :: Platform_API {
 	//set_window_minimized = set_window_minimized_darwin,
 	//set_window_mode = set_window_mode_darwin,
 	process_events = process_events_darwin,
+
+	show_cursor = show_cursor_darwin,
+	hide_cursor = hide_cursor_darwin,
+	cursor_lock_to_window = cursor_lock_to_window_darwin,
+	cursor_unlock_from_window = cursor_unlock_from_window_darwin,
+	is_cursor_on_window = is_cursor_on_window_darwin,
 }
+
+
+
+cursor_lock_to_window_darwin :: proc(id: Window_ID) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	platform.is_cursor_locked = true
+	platform.cursor_locked_window = cast(Window_Handle)state.window
+}
+
+cursor_unlock_from_window_darwin :: proc(id: Window_ID) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	platform.is_cursor_locked = false
+	platform.cursor_locked_window = nil
+}
+
+is_cursor_on_window_darwin :: proc(id: Window_ID) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	frame := state.window->frame()
+	mouse_pos := NS.Event.mouseLocation()
+
+	return mouse_pos.x >= frame.origin.x && mouse_pos.x <= frame.origin.x + frame.size.width &&
+	       mouse_pos.y >= frame.origin.y && mouse_pos.y <= frame.origin.y + frame.size.height
+}
+
+show_cursor_darwin :: proc() {
+	if platform.is_cursor_hidden {
+		NS.Cursor_unhide()
+		NS.Cursor_arrowCursor()->set()
+		platform.is_cursor_hidden = false
+	}
+}
+
+hide_cursor_darwin :: proc() {
+	if !platform.is_cursor_hidden {
+		NS.Cursor_hide()
+		NS.Cursor_arrowCursor()->set()
+
+		platform.is_cursor_hidden = true
+	}
+}
+
 
 set_clipboard_text_darwin :: proc(text: string) {
 	pasteboard := NS.Pasteboard_generalPasteboard()
@@ -167,9 +215,6 @@ process_events_darwin :: proc() {
 			case .ScrollWheel:
 				scroll_x, scroll_y := event->scrollingDelta()
 				emit_input_event(Mouse_Scroll_Event{x=f64(scroll_x), y=f64(scroll_y)})
-			case .MouseEntered:
-			case .MouseExited:
-			// TODO implement touch "pointer" cases
 		}
 		application->sendEvent(event)
 	}

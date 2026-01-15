@@ -10,11 +10,14 @@ main :: proc() {
         height = 800,
         title = "Hellope",)
 
-    set_window_min_size(id, 200, 200)
-    set_window_max_size(id, 400, 400)
+    set_window_min_size(id, 400, 200)
+    set_window_max_size(id, 800, 800)
 
-    for !platform_should_close() {
-        platform_update()
+    for platform_update() {
+
+        if input_key_is_held(.A) {
+            fmt.println(input_mouse_delta_vector(.Both))
+        }
 
         if input_key_went_down(.E) {
             s := get_monitor_count()
@@ -22,14 +25,15 @@ main :: proc() {
         }
         
         if input_key_went_down(.Q) {
-            set_window_size(id, 100, 100)
+            show_cursor()
+
         }
 
-        
         if input_key_went_down(.W) {
-            set_window_size(id, 800, 800)
+            hide_cursor()
         }
-        
+
+        //fmt.println(is_cursor_on_window(id))
     }    
     cleanup()
 }
