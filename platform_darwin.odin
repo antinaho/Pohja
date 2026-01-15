@@ -8,32 +8,129 @@ import NS "core:sys/darwin/Foundation"
 @(private="package")
 DARWIN_PLATFORM_API :: Platform_API {
 	window_state_size = window_state_size_darwin,
+
+	get_window_handle = get_native_window_handle_darwin,
+
 	window_open = window_open_darwin,
 	window_close = window_close_darwin,
-	get_native_window_handle = get_native_window_handle_darwin,
+
+	is_window_fullscreen = is_window_fullscreen,
+	is_window_hidden = is_window_hidden,
+	is_window_visible = is_window_visible,
+	is_window_minimized = is_window_minimized,
+	is_window_maximized = is_window_maximized,
+	is_window_focused = is_window_focused,
+	is_window_resized = is_window_resized,
+	
+	is_window_flag_on = is_window_flag_on,
+	set_window_flag = set_window_flag,
+	clear_window_flag = clear_window_flag,
+
+	minimize_window = minimize_window,
+	maximize_window = maximize_window,
+
+	set_window_title = set_window_title,
 	set_window_position = set_window_position_darwin,
 	set_window_size = set_window_size_darwin,
-	set_window_title = set_window_title_darwin,
-	set_window_visible = set_window_visible_darwin,
-	set_window_minimized = set_window_minimized_darwin,
-	set_window_mode = set_window_mode_darwin,
-	focus_window = focus_window_darwin,
-	process_events = process_events_darwin,
-	get_window_width = get_window_width_darwin,
-	get_window_height = get_window_height_darwin,
+
 	get_window_size = get_window_size_darwin,
+	get_window_position = get_window_position_darwin,
+
+	get_monitor_count = get_monitor_count_darwin,
+	get_monitor_name = get_monitor_name_darwin,
+	get_monitor_size = get_monitor_size_darwin,
+
+	set_clipboard_text = set_clipboard_text_darwin,
+	get_clipboard_text = get_clipboard_text_darwin,
+
+	set_window_min_size = set_window_min_size_darwin,
+	set_window_max_size = set_window_max_size_darwin,
+
+	set_window_focused = set_window_focused_darwin,
+
+	//set_window_visible = set_window_visible_darwin,
+	//set_window_minimized = set_window_minimized_darwin,
+	//set_window_mode = set_window_mode_darwin,
+	process_events = process_events_darwin,
 }
 
-get_window_width_darwin :: proc(id: Window_ID) -> int {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	frame := state.window->frame()
-	return int(frame.width)
+set_clipboard_text_darwin :: proc(text: string) {
+	pasteboard := NS.Pasteboard_generalPasteboard()
+	if pasteboard == nil {
+		return
+	}
+	pasteboard->clearContents()
+		
+	ns_string := NS.String_alloc()->initWithOdinString(text)
+	result := pasteboard->setString(ns_string, NS.Pasteboard_type_utf8())
 }
 
-get_window_height_darwin :: proc(id: Window_ID) -> int {
+get_clipboard_text_darwin :: proc() -> string {
+	pasteboard := NS.Pasteboard_generalPasteboard()
+	
+	if pasteboard == nil {
+		return ""
+	}
+	
+	ns_string := pasteboard->stringForType(NS.Pasteboard_type_utf8())
+	
+	if ns_string == nil {
+		return ""
+	}
+	
+	return string(ns_string->UTF8String())
+}
+
+
+is_window_fullscreen :: proc(id: Window_ID) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	frame := state.window->frame()
-	return int(frame.height)
+	return state.is_fullscreen
+}
+
+is_window_hidden :: proc(id: Window_ID) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return !state.is_visible
+}
+
+is_window_visible :: proc(id: Window_ID) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return state.is_visible
+}
+
+is_window_minimized :: proc(id: Window_ID) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return state.is_minimized
+}
+
+is_window_maximized :: proc(id: Window_ID) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return !state.is_minimized
+}
+
+is_window_focused :: proc(id: Window_ID) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return state.is_focused
+}
+
+is_window_resized :: proc(id: Window_ID) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return state.is_resized
+}
+
+
+is_window_flag_on :: proc(id: Window_ID, flag: Window_Flag) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return flag in state.flags
+}
+
+set_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	state.flags += {flag}
+}
+
+clear_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	state.flags -= {flag}
 }
 
 get_window_size_darwin :: proc(id: Window_ID) -> [2]int {
@@ -236,32 +333,84 @@ code_to_keyboard_key := [255]Input_Keyboard_Key {
 }
 
 set_window_position_darwin :: proc(id: Window_ID, x, y: int) {
+	// Topleft (0, 0), Y increasing downwards
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.x = x
 	state.y = y
 
+	screen := NS.Screen_mainScreen()
+	screen_frame := screen->frame()
+	
 	point := NS.Point {
 		x = NS.Float(x),
-		y = NS.Float(y),
+		y = screen_frame.size.height - NS.Float(y),
 	}
 
-	state.window->setFrameOrigin(point)
-} 
+	state.window->setFrameTopLeftPoint(point)
+}
 
+get_window_position_darwin :: proc(id: Window_ID) -> [2]int {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	
+	// Get the main screen height
+	screen := NS.Screen_mainScreen()
+	screen_frame := screen->frame()
+	
+	// Get window frame (origin is bottom-left corner of window)
+	window_frame := state.window->frame()
+	
+	x := int(window_frame.origin.x)
+	y := int(screen_frame.size.height - window_frame.origin.y - window_frame.size.height)
+	
+	return {x, y}
+}
+
+// X can be infinite but Y gets capped by screen height
 set_window_size_darwin :: proc(id: Window_ID, w, h: int) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 
+	min_width := state.min_width if state.min_width != 0 else w
+	max_width := state.max_width if state.max_width != 0 else max(w, min_width)
+	width := clamp(w, min_width, max_width)
+
+	min_height := state.min_height if state.min_height != 0 else h
+	max_height := state.max_height if state.max_height != 0 else max(h, min_height)
+	height := clamp(h, min_height, max_height)
+
 	frame := state.window->frame()
 	frame.size = {
-		width = NS.Float(w),
-		height = NS.Float(h),
+		width = NS.Float(width),
+		height = NS.Float(height),
 	}
 
 	state.window->setFrame(frame, false)
 }
 
-set_window_title_darwin :: proc(id: Window_ID, title: string) {
+set_window_min_size_darwin :: proc(id: Window_ID, w, h: int) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	state.min_width = w
+	state.min_height = h
+
+	size := get_window_size_darwin(id)
+	if size.x < w || size.y < h {
+		set_window_size_darwin(id, max(w, size.x), max(h, size.y))
+	}
+}
+
+set_window_max_size_darwin :: proc(id: Window_ID, w, h: int) { 
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	state.max_width = w
+	state.max_height = h
+
+	size := get_window_size_darwin(id)
+	if size.x > w || size.y > h {
+		set_window_size_darwin(id, min(w, size.x), min(h, size.y))
+	}
+}
+
+set_window_title :: proc(id: Window_ID, title: string) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	state.title = title
 	ns_title := NS.alloc(NS.String)->initWithOdinString(title)
 	defer ns_title->release()
 	state.window->setTitle(ns_title)
@@ -276,41 +425,17 @@ set_window_visible_darwin :: proc(id: Window_ID, visible: bool) {
 	}
 }
 
-set_window_minimized_darwin :: proc(id: Window_ID, minimized: bool) {
+minimize_window :: proc(id: Window_ID) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	if minimized {
-		state.window->setIsMiniaturized(true)
-	} else {
-		state.window->setIsMiniaturized(false)
-	}
+	state.window->setIsMiniaturized(true)
 }
 
-set_window_mode_darwin :: proc(id: Window_ID, new_mode: Window_Display_Mode) {
+maximize_window :: proc(id: Window_ID) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	prev_mode := state.window_mode
-
-	if new_mode == prev_mode {
-		return
-	}
-
-	// Exit current mode
-	switch prev_mode {
-		case .Windowed:
-		case .Fullscreen, .BorderlessFullscreen:
-			//state.window->toggleFullScreen(false)
-	}
-
-	// Enter new mode
-	switch new_mode {
-		case .Windowed:
-		case .Fullscreen:
-			//state.window->toggleFullScreen(true)
-		case .BorderlessFullscreen:
-			// TODO: implement borderless fullscreen (set window frame to screen size, remove decorations)
-	}
+	state.window->setIsMiniaturized(false)
 }
 
-focus_window_darwin :: proc(id: Window_ID) {
+set_window_focused_darwin :: proc(id: Window_ID) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.window->makeKeyAndOrderFront(nil)
 }
@@ -322,12 +447,11 @@ get_native_window_handle_darwin :: proc(id: Window_ID) -> Window_Handle {
 
 window_close_darwin :: proc(id: Window_ID) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-    
 	state.window->close()
-
 	state.is_alive = false
 }
 
+@(private="package")
 Darwin_Window_State :: struct {
 	using header : Window_State_Header,
 
@@ -339,19 +463,16 @@ window_state_size_darwin :: proc() -> int {
 	return size_of(Darwin_Window_State)
 }
 
-window_open_darwin :: proc(desc: Window_Description) -> Window_ID {
+window_open_darwin :: proc(width, height: int, title: string) -> Window_ID {
 	state, id := get_free_state()
 	darwin_state := cast(^Darwin_Window_State)state
 
 	darwin_state^ = Darwin_Window_State {
 		application = NS.Application.sharedApplication(),
 		window = NS.Window_alloc(),
-		x = desc.x,
-		y = desc.y,
-		width = desc.width,
-		height = desc.height,
-		title = desc.title,
-        flags = desc.flags,
+		width = width,
+		height = height,
+		title = title,
         id = id,
         is_alive = true,
 	}
@@ -362,28 +483,23 @@ window_open_darwin :: proc(desc: Window_Description) -> Window_ID {
 	NS.Application.sharedApplication()->setDelegate(application_delegate_cls)
 
 	rect := NS.Rect {
-		origin = {NS.Float(desc.x), NS.Float(desc.y)},
-		size = {NS.Float(desc.width), NS.Float(desc.height)},
+		origin = {0, 0},
+		size = {NS.Float(width), NS.Float(height)},
 	}
 
 	darwin_state.window->initWithContentRect(rect, {.Resizable, .Closable, .Titled, .Miniaturizable}, .Buffered, false)
 	darwin_state.window->setReleasedWhenClosed(true)
 
-	register_window(cast(Window_Handle)darwin_state.window, id)
-
-	set_window_title(id, desc.title)
-	
-	darwin_state.window->setBackgroundColor(NS.Color_purpleColor())
-
-	darwin_state.window->makeKeyAndOrderFront(nil)
-
-	if .CenterOnOpen in desc.flags {
-		darwin_state.window->center()
-    }
-	
 	window_delegate_cls := NS.window_delegate_register_and_alloc(Window_Delegate_Template, "MyWindowDelegate", context)
 	darwin_state.window->setDelegate(window_delegate_cls)
 	
+	_register_window(cast(Window_Handle)darwin_state.window, id)
+
+	darwin_state.window->setBackgroundColor(NS.Color_purpleColor())
+	darwin_state.window->makeKeyAndOrderFront(nil)
+	darwin_state.window->center()
+	
+	set_window_title(id, title)
 	//NS.Application.sharedApplication()->activateIgnoringOtherApps(true)
 	NS.Application.sharedApplication()->finishLaunching()
 	NS.Application.sharedApplication()->activate()
@@ -522,4 +638,36 @@ window_did_exit_full_screen :: proc(notification: ^NS.Notification) {
 		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
 		state = false,
 	})
+}
+
+get_monitor_count_darwin :: proc() -> int {
+	screens := NS.Screen_screens()
+	return int(screens->count())
+}
+
+get_monitor_name_darwin :: proc(monitor_index: int) -> string {
+	screens := NS.Screen_screens()
+
+	// Maybe assert this..
+	if monitor_index < 0 || monitor_index >= int(screens->count()) {
+		return ""
+	}
+	
+	screen := screens->objectAs(NS.UInteger(monitor_index), ^NS.Screen)
+	screen_name := screen->localizedName()
+
+	return screen_name->odinString()
+}
+
+get_monitor_size_darwin :: proc(monitor_index: int) -> [2]int {
+	screens := NS.Screen_screens()
+	
+	if monitor_index < 0 || monitor_index >= int(screens->count()) {
+		return {0, 0}
+	}
+	
+	screen := screens->objectAs(NS.UInteger(monitor_index), ^NS.Screen)
+	frame := screen->frame()
+	
+	return {int(frame.size.width), int(frame.size.height)}
 }

@@ -16,7 +16,6 @@ PLATFORM_API :: DEFAULT_PLATFORM_API
 platform: Platform
 
 Platform :: struct {
-
 	platform_arena: mem.Arena,
 
 	is_active: bool,
@@ -47,18 +46,18 @@ Platform :: struct {
 }
 
 // Initializes the platform. Call before any other platform procedures.
-init :: proc(max_windows: int = 1) {
+platform_init :: proc(max_windows: int = 1) {
 	assert(max_windows >= 1, "Need at least 1 window!")
 
 	platform.ctx = context
 
-	backing := make([]byte, mem.Kilobyte)
+	backing := make([]byte, 1 * mem.Megabyte)
 	mem.arena_init(&platform.platform_arena, backing)
 	arena_allocator := mem.arena_allocator(&platform.platform_arena)
 
-	state_size := PLATFORM_API.window_state_size()
-	platform.window_states = make([]byte, state_size * max_windows, arena_allocator)
-	platform.state_size = state_size
+	size := state_size()
+	platform.window_states = make([]byte, size * max_windows, arena_allocator)
+	platform.state_size = size
 	platform.max_windows = max_windows
 
 	platform.registry = new(Window_Registry, arena_allocator)
@@ -75,13 +74,10 @@ Window_Registry :: struct {
 	id_to_handle: map[Window_ID]Window_Handle,
 }
 
-// Creates a new window and returns its ID.
-open_window :: proc(desc: Window_Description) -> Window_ID {
-	return PLATFORM_API.window_open(desc)
-}
+
 
 // Register window to the platform
-register_window :: proc(window: Window_Handle, id: Window_ID) {
+_register_window :: proc(window: Window_Handle, id: Window_ID) {
 	platform.registry.handle_to_id[window] = id
 	platform.registry.id_to_handle[id] = window
 }
@@ -91,46 +87,14 @@ lookup_window_id :: proc(window: Window_Handle) -> (Window_ID, bool) {
 	return platform.registry.handle_to_id[window]
 }
 
-// Closes the window with the given ID.
-close_window :: proc(id: Window_ID) {
-	assert(int(id) < platform.max_windows && int(id) >= 0, "Invalid WindowID")
-	PLATFORM_API.window_close(id)
-}
-
 // Signals the platform to exit the main loop after the current frame.
 application_request_shutdown :: #force_inline proc() {
 	platform.shutdown_requested = true
 }
 
-// Changes the window title.
-set_window_title :: proc(id: Window_ID, title: string) {
-	header := cast(^Window_State_Header)get_state_from_id(id)
-	header.title = title
-	PLATFORM_API.set_window_title(id, title)
-}
-
-// Shows or hides the window.
-set_window_visible :: proc(id: Window_ID, visible: bool) {
-	header := cast(^Window_State_Header)get_state_from_id(id)
-	header.is_visible = visible
-	PLATFORM_API.set_window_visible(id, visible)
-}
-
-// Sets the window display mode (windowed, maximized, fullscreen, etc.)
-set_window_mode :: proc(id: Window_ID, mode: Window_Display_Mode) {
-	header := cast(^Window_State_Header)get_state_from_id(id)
-	header.window_mode = mode
-	PLATFORM_API.set_window_mode(id, mode)
-}
-
-// Brings the window to front and gives it input focus.
-focus_window :: proc(id: Window_ID) {
-	PLATFORM_API.focus_window(id)
-}
-
 // Returns the native window handle for use with external libraries.
 get_native_window_handle :: proc(id: Window_ID) -> Window_Handle {
-	return PLATFORM_API.get_native_window_handle(id)
+	return PLATFORM_API.get_window_handle(id)
 }
 
 // Releases all platform resources.
@@ -151,7 +115,7 @@ platform_should_close :: proc() -> bool {
 	return platform.shutdown_requested
 }
 
-platform_update :: proc() {
+platform_update :: proc() -> bool {
 	free_all(platform.frame_allocator)
 
 	input_reset_state()
@@ -183,87 +147,148 @@ platform_update :: proc() {
 		PLATFORM_API.window_close(id)
 		header.close_requested = false
 	}
+
+	return true
 }
+
+state_size :: proc() -> int { return PLATFORM_API.window_state_size() }
+
+get_window_handle :: proc(id: Window_ID) -> rawptr { return PLATFORM_API.get_window_handle(id) }
+
+// Creates a new window and returns its ID.
+open_window :: proc(width, height: int, title: string) -> Window_ID {
+	id := PLATFORM_API.window_open(width, height, title)
+	if id == 0 {
+		set_window_flag(id, .MainWindow)
+	}
+	return id
+}
+
+// Closes the window with the given ID.
+close_window :: proc(id: Window_ID) {
+	assert(int(id) < platform.max_windows && int(id) >= 0, "Invalid WindowID")
+	PLATFORM_API.window_close(id)
+}
+
+is_window_fullscreen :: proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_fullscreen(id) }
+is_window_hidden ::     proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_hidden(id) }
+is_window_visible ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_visible(id) }
+is_window_minimized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_minimized(id) }
+is_window_maximized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_maximized(id) }
+is_window_focused ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_focused(id) }
+is_window_resized ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_resized(id) }
+
+is_window_flag_on ::    proc(id: Window_ID, flag: Window_Flag) -> bool { return PLATFORM_API.is_window_flag_on(id, flag) }
+set_window_flag ::      proc(id: Window_ID, flag: Window_Flag)         { PLATFORM_API.set_window_flag(id, flag) }
+clear_window_flag ::    proc(id: Window_ID, flag: Window_Flag)         { PLATFORM_API.clear_window_flag(id, flag) }
+
+minimize_window ::      proc(id: Window_ID) { PLATFORM_API.minimize_window(id) }
+maximize_window ::      proc(id: Window_ID) { PLATFORM_API.maximize_window(id) }
+
+set_window_title ::     proc(id: Window_ID, title: string)      { PLATFORM_API.set_window_title(id, title) }
+set_window_position ::  proc(id: Window_ID, x, y: int)          { PLATFORM_API.set_window_position(id, x, y) }
+set_window_size ::      proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_size(id, width, height) }
+set_window_focused ::   proc(id: Window_ID)                     { PLATFORM_API.set_window_focused(id) }
+
+get_window_size ::      proc(id: Window_ID) -> [2]int { return PLATFORM_API.get_window_size(id) }
+get_window_width ::     proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).x }
+get_window_height ::    proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).y }
+get_window_position ::  proc(id: Window_ID) -> [2]int { return PLATFORM_API.get_window_position(id) }
+
+get_monitor_count ::    proc() -> int                { return PLATFORM_API.get_monitor_count() }
+get_monitor_name ::     proc(monitor: int) -> string { return PLATFORM_API.get_monitor_name(monitor) }
+get_monitor_size ::     proc(monitor: int) -> [2]int { return PLATFORM_API.get_monitor_size(monitor)}
+get_monitor_width ::    proc(monitor: int) -> int    { return PLATFORM_API.get_monitor_size(monitor).x}
+get_monitor_height ::   proc(monitor: int) -> int    { return PLATFORM_API.get_monitor_size(monitor).y}
+
+set_clipboard_text :: proc(text: string) { PLATFORM_API.set_clipboard_text(text) }
+get_clipboard_text :: proc() -> string   { return PLATFORM_API.get_clipboard_text() }
+
+set_window_min_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_min_size(id, width, height) }
+set_window_max_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_max_size(id, width, height) }
+
 
 Platform_API :: struct {
 	window_state_size: proc() -> int,
 
-	window_open:  proc(desc: Window_Description) -> Window_ID,
+	get_window_handle: proc(id: Window_ID) -> Window_Handle,
+	
+	window_open:  proc(width, height: int, title: string) -> Window_ID,
 	window_close: proc(id: Window_ID),
-	
-	get_native_window_handle: proc(id: Window_ID) -> Window_Handle,
-	
-	set_window_position: proc(id: Window_ID, x, y: int),
-	set_window_size: proc(id: Window_ID, w, h: int),
-	set_window_title: proc(id: Window_ID, title: string),
-	set_window_visible: proc(id: Window_ID, visible: bool),
-	set_window_minimized: proc(id: Window_ID, minimized: bool),
-	set_window_mode: proc(id: Window_ID, mode: Window_Display_Mode),
-	focus_window: proc(id: Window_ID),
 
+	is_window_fullscreen: proc(id: Window_ID) -> bool,
+	is_window_hidden:     proc(id: Window_ID) -> bool,
+	is_window_visible:    proc(id: Window_ID) -> bool,
+	is_window_minimized:  proc(id: Window_ID) -> bool,
+	is_window_maximized:  proc(id: Window_ID) -> bool,
+	is_window_focused:    proc(id: Window_ID) -> bool,
+	is_window_resized:    proc(id: Window_ID) -> bool,
+	
+	is_window_flag_on:    proc(id: Window_ID, flag: Window_Flag) -> bool,
+	set_window_flag:      proc(id: Window_ID, flag: Window_Flag),
+	clear_window_flag:    proc(id: Window_ID, flag: Window_Flag),
+
+	minimize_window:      proc(id: Window_ID),
+	maximize_window:      proc(id: Window_ID),
+
+	set_window_title:     proc(id: Window_ID, title: string), 
+	set_window_position:  proc(id: Window_ID, x, y: int),
+	set_window_size:      proc(id: Window_ID, width, height: int),
+	
+	get_window_size:      proc(id: Window_ID) -> [2]int,
+	get_window_position:  proc(id: Window_ID) -> [2]int,
+	
+	get_monitor_count:    proc() -> int,
+	get_monitor_name:     proc(monitor: int) -> string,
+	get_monitor_size:     proc(monitor: int) -> [2]int,
+
+	set_clipboard_text: proc(text: string),
+	get_clipboard_text: proc() -> string,
+
+	set_window_min_size:  proc(id: Window_ID, width, height: int),
+	set_window_max_size:  proc(id: Window_ID, width, height: int),
+
+	set_window_focused:   proc(id: Window_ID),
+
+	//set_window_icon:      proc(id: Window_ID, image: Image),
+	//set_window_monitor:   proc(id: Window_ID, monitor: int),
+	//set_window_opacity:   proc(id: Window_ID, opacity: f32),
+	
 	process_events: proc(),
-
-	get_window_size: proc(id: Window_ID) -> [2]int,
-	get_window_width: proc(id: Window_ID) -> int,
-	get_window_height: proc(id: Window_ID) -> int,
 }
 
 Window_ID :: distinct u32
-Window_Handle :: distinct uintptr
-
-Window_Display_Mode :: enum {
-	Windowed,
-	Fullscreen,
-	BorderlessFullscreen,
-}
-
-Window_Description :: struct {
-	x: int,
-	y: int,
-	width: int,
-	height: int,
-	title: string,
-	flags: Window_Flags,
-
-	// Size constraints (0 = no constraint)
-	min_width: int,
-	min_height: int,
-	max_width: int,
-	max_height: int,
-
-	// Aspect ratio constraint (0 = no constraint). Expressed as width/height ratio.
-	aspect_ratio: f32,
-}
+Window_Handle :: distinct rawptr
 
 Window_Flags :: bit_set[Window_Flag]
-Window_Flag :: enum {
+Window_Flag  :: enum {
 	MainWindow,      // Closing this window shuts down the application
-	CenterOnOpen,    // Center window on screen when opened
 	Resizable,       // Window can be resized by user
 	Decorated,       // Window has title bar and borders
-	Visible,         // Window is visible on open
-	Focused,         // Window is focused on open
-	Maximized,       // Window is maximized on open
-	AlwaysOnTop,     // Window stays above other windows
 }
 
 Window_State_Header :: struct {
 	id: Window_ID,
+	flags: Window_Flags,
 	is_alive: bool,
 	close_requested: bool,
 	
-	title: string,
 	
-	width: int,
-	height: int,
+	title: string,
 	x: int,
 	y: int,
+	min_width: int,
+	min_height: int,
+	max_width: int,
+	max_height: int,
+	width: int,
+	height: int,
 
+	is_fullscreen: bool,
+	is_resized: bool,
 	is_visible: bool,
 	is_focused: bool,
 	is_minimized: bool,
-	window_mode: Window_Display_Mode,
-	flags: Window_Flags,
 }
 
 // Returns true if the window state is currently in use.
@@ -512,6 +537,7 @@ emit_window_event :: proc(event: Window_Event) {
 			state.close_requested = true
 		case Window_Did_Resize:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
+			state.is_resized = true
 			state.width = e.size.x
 			state.height = e.size.y
 		case Window_Did_Move:
@@ -526,7 +552,7 @@ emit_window_event :: proc(event: Window_Event) {
 			state.is_minimized = e.state
 		case Window_Change_Full_Screen_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.window_mode = .Fullscreen if e.state else .Windowed
+			state.is_fullscreen = e.state
 	}
 }
 
