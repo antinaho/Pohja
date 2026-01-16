@@ -170,11 +170,39 @@ is_window_flag_on :: proc(id: Window_ID, flag: Window_Flag) -> bool {
 set_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.flags += {flag}
+
+	switch flag {
+		case .MainWindow:
+		case .Resizable, .Decorated, .Closable, .Miniaturizable:
+			current := state.window->styleMask()
+			new_mask := current | (1 << NS.UInteger(flag_to_ns_flag(flag)))
+			mask_bitset := transmute(NS.WindowStyleMask)new_mask
+			state.window->setStyleMask(mask_bitset)
+	}
+}
+
+flag_to_ns_flag :: proc(flag: Window_Flag) -> NS.WindowStyleFlag {
+	#partial switch flag {
+		case .Resizable: return NS.WindowStyleFlag.Resizable
+		case .Decorated: return NS.WindowStyleFlag.Titled
+		case .Closable:  return NS.WindowStyleFlag.Closable
+		case .Miniaturizable: return NS.WindowStyleFlag.Miniaturizable
+	}
+	return nil
 }
 
 clear_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.flags -= {flag}
+
+	switch flag {
+		case .MainWindow:
+		case .Resizable, .Decorated, .Closable, .Miniaturizable:
+			current := state.window->styleMask()
+			new_mask := current ~ (1 << NS.UInteger(flag_to_ns_flag(flag)))
+			mask_bitset := transmute(NS.WindowStyleMask)new_mask
+			state.window->setStyleMask(mask_bitset)
+	}
 }
 
 get_window_size_darwin :: proc(id: Window_ID) -> [2]int {

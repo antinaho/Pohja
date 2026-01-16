@@ -12,7 +12,7 @@ main :: proc() {
 
     set_window_min_size(id, 400, 200)
     set_window_max_size(id, 800, 800)
-    cursor_lock_to_window(id)
+    //cursor_lock_to_window(id)
     //set_window_opacity(id, 0.66)
 
     for platform_update() {
@@ -27,7 +27,7 @@ main :: proc() {
         }
         
         if input_key_went_down(.Q) {
-            show_cursor()
+            clear_window_flag(id, .Resizable)
 
         }
 

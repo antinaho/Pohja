@@ -287,8 +287,6 @@ Platform_API :: struct {
 	set_window_min_size:  proc(id: Window_ID, width, height: int),
 	set_window_max_size:  proc(id: Window_ID, width, height: int),
 
-
-
 	//set_window_icon:      proc(id: Window_ID, image: Image),
 	//set_window_monitor:   proc(id: Window_ID, monitor: int),
 	
@@ -307,10 +305,12 @@ Window_ID :: distinct u32
 Window_Handle :: distinct rawptr
 
 Window_Flags :: bit_set[Window_Flag]
-Window_Flag  :: enum {
+Window_Flag  :: enum uint {
 	MainWindow,      // Closing this window shuts down the application
 	Resizable,       // Window can be resized by user
 	Decorated,       // Window has title bar and borders
+	Closable,		 // Close (X) present on titlebar
+	Miniaturizable,  
 }
 
 Window_State_Header :: struct {
