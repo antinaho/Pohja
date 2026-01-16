@@ -49,9 +49,6 @@ DARWIN_PLATFORM_API :: Platform_API {
 
 	set_window_focused = set_window_focused_darwin,
 
-	//set_window_visible = set_window_visible_darwin,
-	//set_window_minimized = set_window_minimized_darwin,
-	//set_window_mode = set_window_mode_darwin,
 	process_events = process_events_darwin,
 
 	show_cursor = show_cursor_darwin,
@@ -59,29 +56,29 @@ DARWIN_PLATFORM_API :: Platform_API {
 	cursor_lock_to_window = cursor_lock_to_window_darwin,
 	cursor_unlock_from_window = cursor_unlock_from_window_darwin,
 	is_cursor_on_window = is_cursor_on_window_darwin,
+	closest_point_within_window = closest_point_within_window_darwin,
+	force_cursor_move_to = force_cursor_move_to_darwin,
 }
-
-
 
 cursor_lock_to_window_darwin :: proc(id: Window_ID) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	platform.is_cursor_locked = true
-	platform.cursor_locked_window = cast(Window_Handle)state.window
+	platform.cursor_locked_window = id
 }
 
 cursor_unlock_from_window_darwin :: proc(id: Window_ID) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	platform.is_cursor_locked = false
-	platform.cursor_locked_window = nil
+	platform.cursor_locked_window = 0
 }
 
 is_cursor_on_window_darwin :: proc(id: Window_ID) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	frame := state.window->frame()
-	mouse_pos := NS.Event.mouseLocation()
+	mouse_pos := platform.mouse_position
 
-	return mouse_pos.x >= frame.origin.x && mouse_pos.x <= frame.origin.x + frame.size.width &&
-	       mouse_pos.y >= frame.origin.y && mouse_pos.y <= frame.origin.y + frame.size.height
+	return mouse_pos.x >= f32(frame.origin.x) && mouse_pos.x < f32(frame.origin.x + frame.size.width ) &&
+	       mouse_pos.y >= f32(frame.origin.y) && mouse_pos.y < f32(frame.origin.y + frame.size.height)
 }
 
 show_cursor_darwin :: proc() {
@@ -210,7 +207,7 @@ process_events_darwin :: proc() {
 				emit_input_event(Mouse_Released_Event{button=code_to_mouse_button[int(btn_n)]})
 
 			case .MouseMoved, .LeftMouseDragged, .RightMouseDragged, .OtherMouseDragged:
-				position := event->locationInWindow()				
+				position := NS.Event_mouseLocation()			
 				emit_input_event(Mouse_Position_Event{x=f64(position.x), y=f64(position.y)})
 			case .ScrollWheel:
 				scroll_x, scroll_y := event->scrollingDelta()
@@ -549,6 +546,11 @@ window_open_darwin :: proc(width, height: int, title: string) -> Window_ID {
 	NS.Application.sharedApplication()->finishLaunching()
 	NS.Application.sharedApplication()->activate()
 
+	// Cursor locking "hack"
+	source := C.CGEventSourceCreate(C.kCGEventSourceStateCombinedSessionState)
+	C.CGEventSourceSetLocalEventsSuppressionInterval(source, 0.001)
+	C.Release(source)
+
 	return id
 }
 
@@ -715,4 +717,25 @@ get_monitor_size_darwin :: proc(monitor_index: int) -> [2]int {
 	frame := screen->frame()
 	
 	return {int(frame.size.width), int(frame.size.height)}
+}
+
+import "core:math"
+closest_point_within_window_darwin :: proc(id: Window_ID, pos: [2]f32) -> [2]f32 {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	frame := state.window->frame()
+
+	return {
+		math.clamp(pos.x, f32(frame.origin.x) + 1, f32(frame.origin.x + frame.size.width  - 1)),
+		math.clamp(pos.y, f32(frame.origin.y) + 1, f32(frame.origin.y + frame.size.height - 1))
+	}
+}
+
+force_cursor_move_to_darwin :: proc(pos: [2]f32) {
+	main_screen := NS.Screen_mainScreen()
+	screen_height := main_screen->frame().size.height
+
+	C.CGWarpMouseCursorPosition({
+		x = C.Float(pos.x),
+		y = C.Float(screen_height) - C.Float(pos.y)
+	})
 }

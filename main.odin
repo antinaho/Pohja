@@ -12,6 +12,8 @@ main :: proc() {
 
     set_window_min_size(id, 400, 200)
     set_window_max_size(id, 800, 800)
+    cursor_lock_to_window(id)
+    set_window_position(id, 0, 0)
 
     for platform_update() {
 
@@ -33,7 +35,7 @@ main :: proc() {
             hide_cursor()
         }
 
-        //fmt.println(is_cursor_on_window(id))
+        set_window_title(id, fmt.tprintf("%v", int(get_fps())))
     }    
     cleanup()
 }

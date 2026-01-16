@@ -46,12 +46,18 @@ Platform :: struct {
 	is_cursor_hidden: bool,
 
 	is_cursor_locked: bool,
-	cursor_locked_window: Window_Handle,
+	cursor_locked_window: Window_ID,
 
 	runtime:        f64,
 	delta_time:     f64,
 	_previous_time: time.Tick,
+	fps:            f64,
+	fps_limit:      int,
 }
+
+get_runtime :: proc() -> f64 { return platform.runtime }
+get_fps :: proc() -> f64 { return platform.fps }
+get_deltatime :: proc() -> f64 { return platform.delta_time }
 
 import "core:time"
 
@@ -139,6 +145,7 @@ platform_update :: proc() -> bool {
 
 	platform.delta_time = time.duration_seconds(time.tick_since(platform._previous_time))
 	platform.runtime += platform.delta_time
+	platform.fps = 1 / platform.delta_time
 	platform._previous_time = time.tick_now()
 
 	// Update windows
@@ -230,9 +237,12 @@ show_cursor :: proc() { PLATFORM_API.show_cursor() }
 hide_cursor :: proc() { PLATFORM_API.hide_cursor() }
 is_cursor_hidden :: proc() -> bool { return platform.is_cursor_hidden }
 
-//cursor_lock_to_window ::     proc(id: Window_ID)         { PLATFORM_API.cursor_lock_to_window(id) }
-//cursor_unlock_from_window :: proc(id: Window_ID)         { PLATFORM_API.cursor_unlock_from_window(id) }
-is_cursor_on_window ::       proc(id: Window_ID) -> bool { return PLATFORM_API.is_cursor_on_window(id) }
+cursor_lock_to_window ::       proc(id: Window_ID)          { PLATFORM_API.cursor_lock_to_window(id) }
+cursor_unlock_from_window ::   proc(id: Window_ID)          { PLATFORM_API.cursor_unlock_from_window(id) }
+is_cursor_on_window ::         proc(id: Window_ID) -> bool  { return PLATFORM_API.is_cursor_on_window(id) }
+closest_point_within_window :: proc(id: Window_ID, 
+	                                pos: [2]f32) -> [2]f32  { return PLATFORM_API.closest_point_within_window(id, pos) }
+force_cursor_move_to ::        proc(pos: [2]f32)            { PLATFORM_API.force_cursor_move_to(pos) }
 
 Platform_API :: struct {
 	window_state_size: proc() -> int,
@@ -287,6 +297,8 @@ Platform_API :: struct {
 	cursor_lock_to_window: proc(id: Window_ID),
 	cursor_unlock_from_window: proc(id: Window_ID),
 	is_cursor_on_window: proc(id: Window_ID) -> bool,
+	closest_point_within_window: proc(id: Window_ID, pos: [2]f32) -> [2]f32,
+	force_cursor_move_to: proc(pos: [2]f32),
 }
 
 Window_ID :: distinct u32
@@ -504,6 +516,12 @@ emit_input_event :: proc (event: Input_Event) {
 		case Mouse_Position_Event:
 			platform.mouse_move_delta = {f32(e.x) - platform.mouse_position.x, f32(e.y) - platform.mouse_position.y}
 			platform.mouse_position = {f32(e.x), f32(e.y)}
+
+			if platform.is_cursor_locked && !is_cursor_on_window(0) {
+				new_p := closest_point_within_window(platform.cursor_locked_window, platform.mouse_position)
+				force_cursor_move_to(new_p)
+				platform.mouse_position = new_p
+			}
 		
 		case Mouse_Scroll_Event:
 			platform.mouse_scroll_delta = {f32(e.x), f32(e.y)}
