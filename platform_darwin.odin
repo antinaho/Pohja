@@ -138,7 +138,7 @@ flag_to_ns_flag :: proc(flag: Window_Flag) -> NS.WindowStyleFlag {
 		case .Closable:       return NS.WindowStyleFlag.Closable
 		case .Miniaturizable: return NS.WindowStyleFlag.Miniaturizable
 	}
-	panic("No NS flag for given flag")
+	panic("No NS flag for given platform flag")
 }
 
 set_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
@@ -441,11 +441,9 @@ set_window_position_darwin :: proc(id: Window_ID, x, y: int) {
 get_window_position_darwin :: proc(id: Window_ID) -> Vec2i {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	
-	// Get the main screen height
 	screen := NS.Screen_mainScreen()
 	screen_frame := screen->frame()
 	
-	// Get window frame (origin is bottom-left corner of window)
 	window_frame := state.window->frame()
 	
 	x := int(window_frame.origin.x)
@@ -454,7 +452,7 @@ get_window_position_darwin :: proc(id: Window_ID) -> Vec2i {
 	return {x, y}
 }
 
-// X can be infinite but Y gets capped by screen height
+// NOTE: X can be infinite but Y gets capped by screen height
 set_window_size_darwin :: proc(id: Window_ID, w, h: int) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 
@@ -538,7 +536,6 @@ window_close_darwin :: proc(id: Window_ID) {
 	state.is_alive = false
 }
 
-@(private="package")
 Darwin_Window_State :: struct {
 	using header : Window_State_Header,
 

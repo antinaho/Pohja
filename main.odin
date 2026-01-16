@@ -15,8 +15,12 @@ main :: proc() {
     //cursor_lock_to_window(id)
     //set_window_opacity(id, 0.66)
 
-    for platform_update() {
 
+    for {
+        n, a, run := platform_update()
+        if !run {
+            break
+        }
         if input_key_is_held(.A) {
             fmt.println(input_mouse_delta_vector(.Both))
         }

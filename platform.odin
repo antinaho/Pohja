@@ -3,6 +3,7 @@ package pohja
 import "core:log"
 import "base:runtime"
 import "core:mem"
+import "core:time"
 
 Vec2i :: [2]int
 Vec2  :: [2]f32
@@ -53,16 +54,15 @@ Platform :: struct {
 
 	runtime:        f64,
 	delta_time:     f64,
-	_previous_time: time.Tick,
+	previous_time:  time.Tick,
 	fps:            f64,
 	fps_limit:      int,
 }
 
-get_runtime :: proc() -> f64 { return platform.runtime }
-get_fps :: proc() -> f64 { return platform.fps }
-get_deltatime :: proc() -> f64 { return platform.delta_time }
-
-import "core:time"
+get_runtime ::   proc() -> f64    { return platform.runtime }
+get_fps ::       proc() -> f64    { return platform.fps }
+get_deltatime :: proc() -> f64    { return platform.delta_time }
+set_fps_limit :: proc(limit: int) { platform.fps_limit = limit }
 
 // Initializes the platform. Call before any other platform procedures.
 platform_init :: proc(max_windows: int = 1) {
@@ -84,7 +84,7 @@ platform_init :: proc(max_windows: int = 1) {
 		handle_to_id = make(map[Window_Handle]Window_ID, arena_allocator),
 		id_to_handle = make(map[Window_ID]Window_Handle, arena_allocator),
 	}
-	platform._previous_time = time.tick_now()
+	platform.previous_time = time.tick_now()
 	platform.frame_allocator = context.temp_allocator
 }
 
@@ -134,10 +134,13 @@ cleanup :: proc() {
 platform_should_close :: proc() -> bool {
 	return platform.shutdown_requested
 }
-
-platform_update :: proc() -> bool {
+MAX_DELTA_TIME :: 1.0 / 10.0
+FIXED_TIMESTEP :: 1.0 / 60.0
+acc: f64
+platform_update :: proc() -> (int, f64, bool) {
+	fixed_updates: int
 	if platform_should_close() {
-		return false
+		return fixed_updates, 0, false
 	}
 
 	free_all(platform.frame_allocator)
@@ -146,12 +149,21 @@ platform_update :: proc() -> bool {
 	PLATFORM_API.process_events()
 	defer platform.event_count = 0
 
-	platform.delta_time = time.duration_seconds(time.tick_since(platform._previous_time))
-	platform.runtime += platform.delta_time
-	platform.fps = 1 / platform.delta_time
-	platform._previous_time = time.tick_now()
+	delta := time.duration_seconds(time.tick_since(platform.previous_time))
+	platform.runtime += delta
+	platform.previous_time = time.tick_now()
 
-	// Update windows
+	if delta > MAX_DELTA_TIME {
+		delta = MAX_DELTA_TIME
+	}
+
+	acc += delta
+	platform.delta_time = delta
+	for acc >= FIXED_TIMESTEP {
+		fixed_updates += 1
+		acc -= FIXED_TIMESTEP
+	}
+	
 	window_close_requested := make(map[Window_ID]bool, allocator=platform.frame_allocator)
 	for i in 0..<platform.max_windows {
 		header := cast(^Window_State_Header)get_state_from_id(Window_ID(i))
@@ -177,7 +189,10 @@ platform_update :: proc() -> bool {
 		header.close_requested = false
 	}
 
-	return true
+
+	alpha := acc / FIXED_TIMESTEP
+	platform.fps = 1.0 / delta
+	return fixed_updates, alpha, true
 }
 
 state_size :: proc() -> int { return PLATFORM_API.window_state_size() }
