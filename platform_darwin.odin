@@ -6,6 +6,8 @@ package pohja
 import NS "core:sys/darwin/Foundation"
 import C "core:sys/darwin/CoreFoundation"
 
+import "core:math"
+
 @(private="package")
 DARWIN_PLATFORM_API :: Platform_API {
 	window_state_size = window_state_size_darwin,
@@ -14,14 +16,6 @@ DARWIN_PLATFORM_API :: Platform_API {
 
 	window_open = window_open_darwin,
 	window_close = window_close_darwin,
-
-	is_window_fullscreen = is_window_fullscreen,
-	is_window_hidden = is_window_hidden,
-	is_window_visible = is_window_visible,
-	is_window_minimized = is_window_minimized,
-	is_window_maximized = is_window_maximized,
-	is_window_focused = is_window_focused,
-	is_window_resized = is_window_resized,
 	
 	is_window_flag_on = is_window_flag_on,
 	set_window_flag = set_window_flag,
@@ -127,44 +121,24 @@ get_clipboard_text_darwin :: proc() -> string {
 	return string(ns_string->UTF8String())
 }
 
-is_window_fullscreen :: proc(id: Window_ID) -> bool {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	return state.is_fullscreen
-}
-
-is_window_hidden :: proc(id: Window_ID) -> bool {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	return !state.is_visible
-}
-
-is_window_visible :: proc(id: Window_ID) -> bool {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	return state.is_visible
-}
-
-is_window_minimized :: proc(id: Window_ID) -> bool {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	return state.is_minimized
-}
-
-is_window_maximized :: proc(id: Window_ID) -> bool {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	return !state.is_minimized
-}
-
-is_window_focused :: proc(id: Window_ID) -> bool {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	return state.is_focused
-}
-
-is_window_resized :: proc(id: Window_ID) -> bool {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	return state.is_resized
-}
-
 is_window_flag_on :: proc(id: Window_ID, flag: Window_Flag) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	return flag in state.flags
+}
+
+is_window_property_on :: proc(id: Window_ID, property: Window_Property) -> bool {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return property in state.properties
+}
+
+flag_to_ns_flag :: proc(flag: Window_Flag) -> NS.WindowStyleFlag {
+	#partial switch flag {
+		case .Resizable:      return NS.WindowStyleFlag.Resizable
+		case .Decorated:      return NS.WindowStyleFlag.Titled
+		case .Closable:       return NS.WindowStyleFlag.Closable
+		case .Miniaturizable: return NS.WindowStyleFlag.Miniaturizable
+	}
+	panic("No NS flag for given flag")
 }
 
 set_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
@@ -181,16 +155,6 @@ set_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 	}
 }
 
-flag_to_ns_flag :: proc(flag: Window_Flag) -> NS.WindowStyleFlag {
-	#partial switch flag {
-		case .Resizable: return NS.WindowStyleFlag.Resizable
-		case .Decorated: return NS.WindowStyleFlag.Titled
-		case .Closable:  return NS.WindowStyleFlag.Closable
-		case .Miniaturizable: return NS.WindowStyleFlag.Miniaturizable
-	}
-	return nil
-}
-
 clear_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.flags -= {flag}
@@ -205,7 +169,7 @@ clear_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 	}
 }
 
-get_window_size_darwin :: proc(id: Window_ID) -> [2]int {
+get_window_size_darwin :: proc(id: Window_ID) -> Vec2i {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	frame := state.window->frame()
 	return {int(frame.width), int(frame.height)}
@@ -230,7 +194,7 @@ get_monitor_name_darwin :: proc(monitor_index: int) -> string {
 	return screen_name->odinString()
 }
 
-get_monitor_size_darwin :: proc(monitor_index: int) -> [2]int {
+get_monitor_size_darwin :: proc(monitor_index: int) -> Vec2i {
 	screens := NS.Screen_screens()
 	
 	if monitor_index < 0 || monitor_index >= int(screens->count()) {
@@ -243,8 +207,7 @@ get_monitor_size_darwin :: proc(monitor_index: int) -> [2]int {
 	return {int(frame.size.width), int(frame.size.height)}
 }
 
-import "core:math"
-closest_point_within_window_darwin :: proc(id: Window_ID, pos: [2]f32) -> [2]f32 {
+closest_point_within_window_darwin :: proc(id: Window_ID, pos: Vec2) -> Vec2 {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	frame := state.window->frame()
 
@@ -254,7 +217,7 @@ closest_point_within_window_darwin :: proc(id: Window_ID, pos: [2]f32) -> [2]f32
 	}
 }
 
-force_cursor_move_to_darwin :: proc(pos: [2]f32) {
+force_cursor_move_to_darwin :: proc(pos: Vec2) {
 	main_screen := NS.Screen_mainScreen()
 	screen_height := main_screen->frame().size.height
 
@@ -462,8 +425,7 @@ code_to_keyboard_key := [255]Input_Keyboard_Key {
 set_window_position_darwin :: proc(id: Window_ID, x, y: int) {
 	// Topleft (0, 0), Y increasing downwards
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	state.x = x
-	state.y = y
+	state.position = {x, y}
 
 	screen := NS.Screen_mainScreen()
 	screen_frame := screen->frame()
@@ -476,7 +438,7 @@ set_window_position_darwin :: proc(id: Window_ID, x, y: int) {
 	state.window->setFrameTopLeftPoint(point)
 }
 
-get_window_position_darwin :: proc(id: Window_ID) -> [2]int {
+get_window_position_darwin :: proc(id: Window_ID) -> Vec2i {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	
 	// Get the main screen height
@@ -496,12 +458,12 @@ get_window_position_darwin :: proc(id: Window_ID) -> [2]int {
 set_window_size_darwin :: proc(id: Window_ID, w, h: int) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 
-	min_width := state.min_width if state.min_width != 0 else w
-	max_width := state.max_width if state.max_width != 0 else max(w, min_width)
+	min_width := state.min_size.x if state.min_size.x != 0 else w
+	max_width := state.max_size.x if state.max_size.x != 0 else max(w, min_width)
 	width := clamp(w, min_width, max_width)
 
-	min_height := state.min_height if state.min_height != 0 else h
-	max_height := state.max_height if state.max_height != 0 else max(h, min_height)
+	min_height := state.min_size.y if state.min_size.y != 0 else h
+	max_height := state.max_size.y if state.max_size.y != 0 else max(h, min_height)
 	height := clamp(h, min_height, max_height)
 
 	frame := state.window->frame()
@@ -515,9 +477,8 @@ set_window_size_darwin :: proc(id: Window_ID, w, h: int) {
 
 set_window_min_size_darwin :: proc(id: Window_ID, w, h: int) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	state.min_width = w
-	state.min_height = h
-
+	state.min_size = {w, h}
+	
 	size := get_window_size_darwin(id)
 	if size.x < w || size.y < h {
 		set_window_size_darwin(id, max(w, size.x), max(h, size.y))
@@ -526,8 +487,7 @@ set_window_min_size_darwin :: proc(id: Window_ID, w, h: int) {
 
 set_window_max_size_darwin :: proc(id: Window_ID, w, h: int) { 
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	state.max_width = w
-	state.max_height = h
+	state.max_size = {w, h}
 
 	size := get_window_size_darwin(id)
 	if size.x > w || size.y > h {
@@ -597,8 +557,7 @@ window_open_darwin :: proc(width, height: int, title: string) -> Window_ID {
 	darwin_state^ = Darwin_Window_State {
 		application = NS.Application.sharedApplication(),
 		window = NS.Window_alloc(),
-		width = width,
-		height = height,
+		size = {width, height},
 		title = title,
         id = id,
         is_alive = true,

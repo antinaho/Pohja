@@ -4,6 +4,9 @@ import "core:log"
 import "base:runtime"
 import "core:mem"
 
+Vec2i :: [2]int
+Vec2  :: [2]f32
+
 when ODIN_OS == .Darwin {
 	DEFAULT_PLATFORM_API :: DARWIN_PLATFORM_API
 } else when ODIN_OS == .Windows {
@@ -35,9 +38,9 @@ Platform :: struct {
 	mouse_held: #sparse [Input_Mouse_Button]bool,
 	mouse_released: #sparse [Input_Mouse_Button]bool,
 
-	mouse_position: [2]f32,
-	mouse_move_delta: [2]f32,
-	mouse_scroll_delta: [2]f32,
+	mouse_position: Vec2,
+	mouse_move_delta: Vec2,
+	mouse_scroll_delta: Vec2,
 
 	events: [MAX_INPUT_EVENTS_PER_FRAME]Input_Event,
 	event_count: int,
@@ -196,13 +199,13 @@ close_window :: proc(id: Window_ID) {
 	PLATFORM_API.window_close(id)
 }
 
-is_window_fullscreen :: proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_fullscreen(id) }
-is_window_hidden ::     proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_hidden(id) }
-is_window_visible ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_visible(id) }
-is_window_minimized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_minimized(id) }
-is_window_maximized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_maximized(id) }
-is_window_focused ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_focused(id) }
-is_window_resized ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_resized(id) }
+is_window_fullscreen :: proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Fullscreen) }
+is_window_hidden ::     proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Visible)    }
+is_window_visible ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Visible)    }
+is_window_minimized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Minimized)  }
+is_window_maximized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Minimized)  }
+is_window_focused ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Focused)    }
+is_window_resized ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Resized)    }
 
 is_window_flag_on ::    proc(id: Window_ID, flag: Window_Flag) -> bool { return PLATFORM_API.is_window_flag_on(id, flag) }
 set_window_flag ::      proc(id: Window_ID, flag: Window_Flag)         { PLATFORM_API.set_window_flag(id, flag) }
@@ -217,14 +220,14 @@ set_window_size ::      proc(id: Window_ID, width, height: int) { PLATFORM_API.s
 set_window_focused ::   proc(id: Window_ID)                     { PLATFORM_API.set_window_focused(id) }
 set_window_opacity ::   proc(id: Window_ID, value: f32)         { PLATFORM_API.set_window_opacity(id, value) }
 
-get_window_size ::      proc(id: Window_ID) -> [2]int { return PLATFORM_API.get_window_size(id) }
+get_window_size ::      proc(id: Window_ID) -> Vec2i { return PLATFORM_API.get_window_size(id) }
 get_window_width ::     proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).x }
 get_window_height ::    proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).y }
-get_window_position ::  proc(id: Window_ID) -> [2]int { return PLATFORM_API.get_window_position(id) }
+get_window_position ::  proc(id: Window_ID) -> Vec2i { return PLATFORM_API.get_window_position(id) }
 
 get_monitor_count ::    proc() -> int                { return PLATFORM_API.get_monitor_count() }
 get_monitor_name ::     proc(monitor: int) -> string { return PLATFORM_API.get_monitor_name(monitor) }
-get_monitor_size ::     proc(monitor: int) -> [2]int { return PLATFORM_API.get_monitor_size(monitor)}
+get_monitor_size ::     proc(monitor: int) -> Vec2i { return PLATFORM_API.get_monitor_size(monitor)}
 get_monitor_width ::    proc(monitor: int) -> int    { return PLATFORM_API.get_monitor_size(monitor).x}
 get_monitor_height ::   proc(monitor: int) -> int    { return PLATFORM_API.get_monitor_size(monitor).y}
 
@@ -242,8 +245,17 @@ cursor_lock_to_window ::       proc(id: Window_ID)          { PLATFORM_API.curso
 cursor_unlock_from_window ::   proc(id: Window_ID)          { PLATFORM_API.cursor_unlock_from_window(id) }
 is_cursor_on_window ::         proc(id: Window_ID) -> bool  { return PLATFORM_API.is_cursor_on_window(id) }
 closest_point_within_window :: proc(id: Window_ID, 
-	                                pos: [2]f32) -> [2]f32  { return PLATFORM_API.closest_point_within_window(id, pos) }
-force_cursor_move_to ::        proc(pos: [2]f32)            { PLATFORM_API.force_cursor_move_to(pos) }
+	                                pos: Vec2) -> Vec2  { return PLATFORM_API.closest_point_within_window(id, pos) }
+force_cursor_move_to ::        proc(pos: Vec2)            { PLATFORM_API.force_cursor_move_to(pos) }
+
+Window_Properties :: bit_set[Window_Property]
+Window_Property :: enum {
+	Fullscreen,
+	Visible,
+	Minimized,
+	Focused,
+	Resized,
+}
 
 Platform_API :: struct {
 	window_state_size: proc() -> int,
@@ -253,13 +265,7 @@ Platform_API :: struct {
 	window_open:  proc(width, height: int, title: string) -> Window_ID,
 	window_close: proc(id: Window_ID),
 
-	is_window_fullscreen: proc(id: Window_ID) -> bool,
-	is_window_hidden:     proc(id: Window_ID) -> bool,
-	is_window_visible:    proc(id: Window_ID) -> bool,
-	is_window_minimized:  proc(id: Window_ID) -> bool,
-	is_window_maximized:  proc(id: Window_ID) -> bool,
-	is_window_focused:    proc(id: Window_ID) -> bool,
-	is_window_resized:    proc(id: Window_ID) -> bool,
+	is_window_property_on: proc(id: Window_ID, property: Window_Property) -> bool,
 	
 	is_window_flag_on:    proc(id: Window_ID, flag: Window_Flag) -> bool,
 	set_window_flag:      proc(id: Window_ID, flag: Window_Flag),
@@ -274,12 +280,12 @@ Platform_API :: struct {
 	set_window_focused:   proc(id: Window_ID),
 	set_window_opacity:   proc(id: Window_ID, opacity: f32),
 	
-	get_window_size:      proc(id: Window_ID) -> [2]int,
-	get_window_position:  proc(id: Window_ID) -> [2]int,
+	get_window_size:      proc(id: Window_ID) -> Vec2i,
+	get_window_position:  proc(id: Window_ID) -> Vec2i,
 	
 	get_monitor_count:    proc() -> int,
 	get_monitor_name:     proc(monitor: int) -> string,
-	get_monitor_size:     proc(monitor: int) -> [2]int,
+	get_monitor_size:     proc(monitor: int) -> Vec2i,
 
 	set_clipboard_text: proc(text: string),
 	get_clipboard_text: proc() -> string,
@@ -288,6 +294,7 @@ Platform_API :: struct {
 	set_window_max_size:  proc(id: Window_ID, width, height: int),
 
 	//set_window_icon:      proc(id: Window_ID, image: Image),
+	// Need to buy second monitor before I can implement this :)
 	//set_window_monitor:   proc(id: Window_ID, monitor: int),
 	
 	process_events: proc(),
@@ -297,8 +304,8 @@ Platform_API :: struct {
 	cursor_lock_to_window: proc(id: Window_ID),
 	cursor_unlock_from_window: proc(id: Window_ID),
 	is_cursor_on_window: proc(id: Window_ID) -> bool,
-	closest_point_within_window: proc(id: Window_ID, pos: [2]f32) -> [2]f32,
-	force_cursor_move_to: proc(pos: [2]f32),
+	closest_point_within_window: proc(id: Window_ID, pos: Vec2) -> Vec2,
+	force_cursor_move_to: proc(pos: Vec2),
 }
 
 Window_ID :: distinct u32
@@ -309,8 +316,8 @@ Window_Flag  :: enum uint {
 	MainWindow,      // Closing this window shuts down the application
 	Resizable,       // Window can be resized by user
 	Decorated,       // Window has title bar and borders
-	Closable,		 // Close (X) present on titlebar
-	Miniaturizable,  
+	Closable,		 // Close button present in titlebar
+	Miniaturizable,  // Minimize button present in titlebar
 }
 
 Window_State_Header :: struct {
@@ -319,22 +326,13 @@ Window_State_Header :: struct {
 	is_alive: bool,
 	close_requested: bool,
 	
-	
 	title: string,
-	x: int,
-	y: int,
-	min_width: int,
-	min_height: int,
-	max_width: int,
-	max_height: int,
-	width: int,
-	height: int,
+	position: Vec2i,
+	min_size: Vec2i,
+	max_size: Vec2i,
+	size: Vec2i,
 
-	is_fullscreen: bool,
-	is_resized: bool,
-	is_visible: bool,
-	is_focused: bool,
-	is_minimized: bool,
+	properties: Window_Properties,
 }
 
 // Returns true if the window state is currently in use.
@@ -429,7 +427,7 @@ input_scroll_magnitude :: proc "contextless" (direction: Input_Scroll_Direction)
 }
 
 // Returns the scroll delta as a 2D vector for the given direction this frame.
-input_scroll_vector :: proc "contextless" (direction: Input_Scroll_Direction) -> [2]f32 {
+input_scroll_vector :: proc "contextless" (direction: Input_Scroll_Direction) -> Vec2 {
 	if direction == .X {
 		return {1, 0} * f32(platform.mouse_scroll_delta.x)
 	} else if direction == .Y {
@@ -440,7 +438,7 @@ input_scroll_vector :: proc "contextless" (direction: Input_Scroll_Direction) ->
 }
 
 // Returns the current mouse position.
-input_mouse_position :: proc "contextless" () -> [2]f32 {
+input_mouse_position :: proc "contextless" () -> Vec2 {
 	return {f32(platform.mouse_position.x), f32(platform.mouse_position.y)}
 }
 
@@ -456,7 +454,7 @@ input_mouse_delta :: proc "contextless" (direction: Input_Scroll_Direction) -> f
 }
 
 // Returns the mouse movement delta as a 2D vector for the given direction this frame.
-input_mouse_delta_vector :: proc "contextless" (direction: Input_Scroll_Direction) -> [2]f32 {
+input_mouse_delta_vector :: proc "contextless" (direction: Input_Scroll_Direction) -> Vec2 {
 	if direction == .X {
 		return {1, 0} * f32(platform.mouse_move_delta.x)
 	} else if direction == .Y {
@@ -573,8 +571,8 @@ Window_Event :: union {
 
 Window_Did_Change_Occlusion_State :: struct { sender: Window_ID, state: bool }
 Window_Should_Close               :: struct { sender: Window_ID }
-Window_Did_Resize                 :: struct { sender: Window_ID, size: [2]int }
-Window_Did_Move                   :: struct { sender: Window_ID, position: [2]int }
+Window_Did_Resize                 :: struct { sender: Window_ID, size: Vec2i }
+Window_Did_Move                   :: struct { sender: Window_ID, position: Vec2i }
 Window_Change_Key_State           :: struct { sender: Window_ID, state: bool }
 Window_Change_Miniaturize_State   :: struct { sender: Window_ID, state: bool }
 Window_Change_Full_Screen_State   :: struct { sender: Window_ID, state: bool }
@@ -583,28 +581,30 @@ emit_window_event :: proc(event: Window_Event) {
 	switch e in event {
 		case Window_Did_Change_Occlusion_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.is_visible = e.state
+			if e.state { state.properties += {.Visible} }
+			else { state.properties -= {.Visible} }
 		case Window_Should_Close:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			state.close_requested = true
 		case Window_Did_Resize:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.is_resized = true
-			state.width = e.size.x
-			state.height = e.size.y
+			state.properties += {.Resized}
+			state.size = e.size
 		case Window_Did_Move:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.x = e.position.x
-			state.y = e.position.y
+			state.position = e.position
 		case Window_Change_Key_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.is_focused = e.state
+			if e.state { state.properties += {.Focused} }
+			else { state.properties -= {.Focused} }
 		case Window_Change_Miniaturize_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.is_minimized = e.state
+			if e.state { state.properties += {.Minimized} }
+			else { state.properties -= {.Minimized} }
 		case Window_Change_Full_Screen_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.is_fullscreen = e.state
+			if e.state { state.properties += {.Fullscreen} }
+			else { state.properties -= {.Fullscreen} }
 	}
 }
 
