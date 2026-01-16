@@ -16,11 +16,7 @@ main :: proc() {
     //set_window_opacity(id, 0.66)
 
 
-    for {
-        n, a, run := platform_update()
-        if !run {
-            break
-        }
+    for platform_update() {
         if input_key_is_held(.A) {
             fmt.println(input_mouse_delta_vector(.Both))
         }
@@ -32,14 +28,14 @@ main :: proc() {
         
         if input_key_went_down(.Q) {
             clear_window_flag(id, .Resizable)
-
         }
 
         if input_key_went_down(.W) {
             hide_cursor()
         }
 
-        set_window_title(id, fmt.tprintf("%v", int(get_fps())))
+        dt_ms := f64(get_deltatime_ns()) / 1_000_000
+        set_window_title(id, fmt.tprintf("%.1f ms", dt_ms))
     }    
     cleanup()
 }

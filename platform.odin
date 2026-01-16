@@ -52,17 +52,13 @@ Platform :: struct {
 	is_cursor_locked: bool,
 	cursor_locked_window: Window_ID,
 
-	runtime:        f64,
-	delta_time:     f64,
+	runtime_ns:     i64,
+	delta_time_ns:  i64,
 	previous_time:  time.Tick,
-	fps:            f64,
-	fps_limit:      int,
 }
 
-get_runtime ::   proc() -> f64    { return platform.runtime }
-get_fps ::       proc() -> f64    { return platform.fps }
-get_deltatime :: proc() -> f64    { return platform.delta_time }
-set_fps_limit :: proc(limit: int) { platform.fps_limit = limit }
+get_runtime_ns ::   proc() -> i64 { return platform.runtime_ns }
+get_deltatime_ns :: proc() -> i64 { return platform.delta_time_ns }
 
 // Initializes the platform. Call before any other platform procedures.
 platform_init :: proc(max_windows: int = 1) {
@@ -134,13 +130,11 @@ cleanup :: proc() {
 platform_should_close :: proc() -> bool {
 	return platform.shutdown_requested
 }
-MAX_DELTA_TIME :: 1.0 / 10.0
-FIXED_TIMESTEP :: 1.0 / 60.0
-acc: f64
-platform_update :: proc() -> (int, f64, bool) {
-	fixed_updates: int
+MAX_DELTA_TIME_NS :: 100 * time.Millisecond // 100ms = 1/10th second
+
+platform_update :: proc() -> bool {
 	if platform_should_close() {
-		return fixed_updates, 0, false
+		return false
 	}
 
 	free_all(platform.frame_allocator)
@@ -149,20 +143,15 @@ platform_update :: proc() -> (int, f64, bool) {
 	PLATFORM_API.process_events()
 	defer platform.event_count = 0
 
-	delta := time.duration_seconds(time.tick_since(platform.previous_time))
-	platform.runtime += delta
+	delta_ns := i64(time.tick_since(platform.previous_time))
 	platform.previous_time = time.tick_now()
 
-	if delta > MAX_DELTA_TIME {
-		delta = MAX_DELTA_TIME
+	if delta_ns > i64(MAX_DELTA_TIME_NS) {
+		delta_ns = i64(MAX_DELTA_TIME_NS)
 	}
 
-	acc += delta
-	platform.delta_time = delta
-	for acc >= FIXED_TIMESTEP {
-		fixed_updates += 1
-		acc -= FIXED_TIMESTEP
-	}
+	platform.delta_time_ns = delta_ns
+	platform.runtime_ns += delta_ns
 	
 	window_close_requested := make(map[Window_ID]bool, allocator=platform.frame_allocator)
 	for i in 0..<platform.max_windows {
@@ -178,7 +167,7 @@ platform_update :: proc() -> (int, f64, bool) {
 	}
 
 	// Close windows that requested shutdown
-	for id, state in window_close_requested {
+	for id, _ in window_close_requested {
 		header := cast(^Window_State_Header)get_state_from_id(id)
 
 		if .MainWindow in header.flags {
@@ -189,10 +178,7 @@ platform_update :: proc() -> (int, f64, bool) {
 		header.close_requested = false
 	}
 
-
-	alpha := acc / FIXED_TIMESTEP
-	platform.fps = 1.0 / delta
-	return fixed_updates, alpha, true
+	return true
 }
 
 state_size :: proc() -> int { return PLATFORM_API.window_state_size() }
