@@ -215,6 +215,7 @@ set_window_title ::     proc(id: Window_ID, title: string)      { PLATFORM_API.s
 set_window_position ::  proc(id: Window_ID, x, y: int)          { PLATFORM_API.set_window_position(id, x, y) }
 set_window_size ::      proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_size(id, width, height) }
 set_window_focused ::   proc(id: Window_ID)                     { PLATFORM_API.set_window_focused(id) }
+set_window_opacity ::   proc(id: Window_ID, value: f32)         { PLATFORM_API.set_window_opacity(id, value) }
 
 get_window_size ::      proc(id: Window_ID) -> [2]int { return PLATFORM_API.get_window_size(id) }
 get_window_width ::     proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).x }
@@ -270,6 +271,8 @@ Platform_API :: struct {
 	set_window_title:     proc(id: Window_ID, title: string), 
 	set_window_position:  proc(id: Window_ID, x, y: int),
 	set_window_size:      proc(id: Window_ID, width, height: int),
+	set_window_focused:   proc(id: Window_ID),
+	set_window_opacity:   proc(id: Window_ID, opacity: f32),
 	
 	get_window_size:      proc(id: Window_ID) -> [2]int,
 	get_window_position:  proc(id: Window_ID) -> [2]int,
@@ -284,11 +287,10 @@ Platform_API :: struct {
 	set_window_min_size:  proc(id: Window_ID, width, height: int),
 	set_window_max_size:  proc(id: Window_ID, width, height: int),
 
-	set_window_focused:   proc(id: Window_ID),
+
 
 	//set_window_icon:      proc(id: Window_ID, image: Image),
 	//set_window_monitor:   proc(id: Window_ID, monitor: int),
-	//set_window_opacity:   proc(id: Window_ID, opacity: f32),
 	
 	process_events: proc(),
 
@@ -470,7 +472,7 @@ Input_Scroll_Direction :: enum {
 	Both,
 }
 
-MAX_INPUT_EVENTS_PER_FRAME :: 256
+MAX_INPUT_EVENTS_PER_FRAME :: 128
 
 Input_Event :: union {
 	Key_Pressed_Event,

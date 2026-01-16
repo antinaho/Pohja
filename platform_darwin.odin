@@ -33,6 +33,9 @@ DARWIN_PLATFORM_API :: Platform_API {
 	set_window_title = set_window_title,
 	set_window_position = set_window_position_darwin,
 	set_window_size = set_window_size_darwin,
+	set_window_focused = set_window_focused_darwin,
+	set_window_opacity = set_window_opacity_darwin,
+
 
 	get_window_size = get_window_size_darwin,
 	get_window_position = get_window_position_darwin,
@@ -47,7 +50,6 @@ DARWIN_PLATFORM_API :: Platform_API {
 	set_window_min_size = set_window_min_size_darwin,
 	set_window_max_size = set_window_max_size_darwin,
 
-	set_window_focused = set_window_focused_darwin,
 
 	process_events = process_events_darwin,
 
@@ -98,7 +100,6 @@ hide_cursor_darwin :: proc() {
 	}
 }
 
-
 set_clipboard_text_darwin :: proc(text: string) {
 	pasteboard := NS.Pasteboard_generalPasteboard()
 	if pasteboard == nil {
@@ -125,7 +126,6 @@ get_clipboard_text_darwin :: proc() -> string {
 	
 	return string(ns_string->UTF8String())
 }
-
 
 is_window_fullscreen :: proc(id: Window_ID) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
@@ -162,7 +162,6 @@ is_window_resized :: proc(id: Window_ID) -> bool {
 	return state.is_resized
 }
 
-
 is_window_flag_on :: proc(id: Window_ID, flag: Window_Flag) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	return flag in state.flags
@@ -182,6 +181,64 @@ get_window_size_darwin :: proc(id: Window_ID) -> [2]int {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	frame := state.window->frame()
 	return {int(frame.width), int(frame.height)}
+}
+
+get_monitor_count_darwin :: proc() -> int {
+	screens := NS.Screen_screens()
+	return int(screens->count())
+}
+
+get_monitor_name_darwin :: proc(monitor_index: int) -> string {
+	screens := NS.Screen_screens()
+
+	// Maybe assert this..
+	if monitor_index < 0 || monitor_index >= int(screens->count()) {
+		return ""
+	}
+	
+	screen := screens->objectAs(NS.UInteger(monitor_index), ^NS.Screen)
+	screen_name := screen->localizedName()
+
+	return screen_name->odinString()
+}
+
+get_monitor_size_darwin :: proc(monitor_index: int) -> [2]int {
+	screens := NS.Screen_screens()
+	
+	if monitor_index < 0 || monitor_index >= int(screens->count()) {
+		return {0, 0}
+	}
+	
+	screen := screens->objectAs(NS.UInteger(monitor_index), ^NS.Screen)
+	frame := screen->frame()
+	
+	return {int(frame.size.width), int(frame.size.height)}
+}
+
+import "core:math"
+closest_point_within_window_darwin :: proc(id: Window_ID, pos: [2]f32) -> [2]f32 {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	frame := state.window->frame()
+
+	return {
+		math.clamp(pos.x, f32(frame.origin.x) + 1, f32(frame.origin.x + frame.size.width  - 1)),
+		math.clamp(pos.y, f32(frame.origin.y) + 1, f32(frame.origin.y + frame.size.height - 1))
+	}
+}
+
+force_cursor_move_to_darwin :: proc(pos: [2]f32) {
+	main_screen := NS.Screen_mainScreen()
+	screen_height := main_screen->frame().size.height
+
+	C.CGWarpMouseCursorPosition({
+		x = C.Float(pos.x),
+		y = C.Float(screen_height) - C.Float(pos.y)
+	})
+}
+
+set_window_opacity_darwin :: proc(id: Window_ID, value: f32) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	state.window->setAlphaValue(NS.Float(value))
 }
 
 process_events_darwin :: proc() {
@@ -684,58 +741,5 @@ window_did_exit_full_screen :: proc(notification: ^NS.Notification) {
 	emit_window_event(Window_Change_Full_Screen_State{
 		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
 		state = false,
-	})
-}
-
-get_monitor_count_darwin :: proc() -> int {
-	screens := NS.Screen_screens()
-	return int(screens->count())
-}
-
-get_monitor_name_darwin :: proc(monitor_index: int) -> string {
-	screens := NS.Screen_screens()
-
-	// Maybe assert this..
-	if monitor_index < 0 || monitor_index >= int(screens->count()) {
-		return ""
-	}
-	
-	screen := screens->objectAs(NS.UInteger(monitor_index), ^NS.Screen)
-	screen_name := screen->localizedName()
-
-	return screen_name->odinString()
-}
-
-get_monitor_size_darwin :: proc(monitor_index: int) -> [2]int {
-	screens := NS.Screen_screens()
-	
-	if monitor_index < 0 || monitor_index >= int(screens->count()) {
-		return {0, 0}
-	}
-	
-	screen := screens->objectAs(NS.UInteger(monitor_index), ^NS.Screen)
-	frame := screen->frame()
-	
-	return {int(frame.size.width), int(frame.size.height)}
-}
-
-import "core:math"
-closest_point_within_window_darwin :: proc(id: Window_ID, pos: [2]f32) -> [2]f32 {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	frame := state.window->frame()
-
-	return {
-		math.clamp(pos.x, f32(frame.origin.x) + 1, f32(frame.origin.x + frame.size.width  - 1)),
-		math.clamp(pos.y, f32(frame.origin.y) + 1, f32(frame.origin.y + frame.size.height - 1))
-	}
-}
-
-force_cursor_move_to_darwin :: proc(pos: [2]f32) {
-	main_screen := NS.Screen_mainScreen()
-	screen_height := main_screen->frame().size.height
-
-	C.CGWarpMouseCursorPosition({
-		x = C.Float(pos.x),
-		y = C.Float(screen_height) - C.Float(pos.y)
 	})
 }
