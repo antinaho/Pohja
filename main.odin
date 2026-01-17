@@ -15,10 +15,15 @@ main :: proc() {
     //cursor_lock_to_window(id)
     //set_window_opacity(id, 0.66)
 
+    p := rawptr(uintptr(id))
+
+
 
     for platform_update() {
         if input_key_is_held(.A) {
-            fmt.println(input_mouse_delta_vector(.Both))
+            id := Window_ID(uintptr(p))
+            
+            fmt.println(is_window_visible(id))
         }
 
         if input_key_went_down(.E) {

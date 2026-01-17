@@ -201,9 +201,9 @@ close_window :: proc(id: Window_ID) {
 
 is_window_fullscreen ::         proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Fullscreen) }
 is_window_visible ::            proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Visible)    }
-is_window_hidden ::             proc(id: Window_ID) -> bool { return !is_window_visible(id)}
+is_window_hidden ::             proc(id: Window_ID) -> bool { return is_window_visible(id)}
 is_window_maximized ::          proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Minimized)  }
-is_window_minimized ::          proc(id: Window_ID) -> bool { return !is_window_maximized(id)}
+is_window_minimized ::          proc(id: Window_ID) -> bool { return is_window_maximized(id)}
 is_window_focused ::            proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Focused)    }
 is_window_resized_this_frame :: proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Resized_This_Frame)    }
 
