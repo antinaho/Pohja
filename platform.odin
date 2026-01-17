@@ -8,6 +8,8 @@ import "core:time"
 Vec2i :: [2]int
 Vec2  :: [2]f32
 
+MAX_DELTA_TIME_NS :: #config(MAX_DELTA_TIME_NS, 100 * time.Millisecond) // 100ms, 1/10th second
+
 when ODIN_OS == .Darwin {
 	DEFAULT_PLATFORM_API :: DARWIN_PLATFORM_API
 } else when ODIN_OS == .Windows {
@@ -84,8 +86,6 @@ platform_init :: proc(max_windows: int = 1) {
 	platform.frame_allocator = context.temp_allocator
 }
 
-
-
 Window_Registry :: struct {
 	handle_to_id: map[Window_Handle]Window_ID,
 	id_to_handle: map[Window_ID]Window_Handle,
@@ -130,7 +130,6 @@ cleanup :: proc() {
 platform_should_close :: proc() -> bool {
 	return platform.shutdown_requested
 }
-MAX_DELTA_TIME_NS :: 100 * time.Millisecond // 100ms = 1/10th second
 
 platform_update :: proc() -> bool {
 	if platform_should_close() {
@@ -200,13 +199,13 @@ close_window :: proc(id: Window_ID) {
 	PLATFORM_API.window_close(id)
 }
 
-is_window_fullscreen :: proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Fullscreen) }
-is_window_hidden ::     proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Visible)    }
-is_window_visible ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Visible)    }
-is_window_minimized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Minimized)  }
-is_window_maximized ::  proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Minimized)  }
-is_window_focused ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Focused)    }
-is_window_resized ::    proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Resized)    }
+is_window_fullscreen ::         proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Fullscreen) }
+is_window_visible ::            proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Visible)    }
+is_window_hidden ::             proc(id: Window_ID) -> bool { return !is_window_visible(id)}
+is_window_maximized ::          proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Minimized)  }
+is_window_minimized ::          proc(id: Window_ID) -> bool { return !is_window_maximized(id)}
+is_window_focused ::            proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Focused)    }
+is_window_resized_this_frame :: proc(id: Window_ID) -> bool { return PLATFORM_API.is_window_property_on(id, .Resized_This_Frame)    }
 
 is_window_flag_on ::    proc(id: Window_ID, flag: Window_Flag) -> bool { return PLATFORM_API.is_window_flag_on(id, flag) }
 set_window_flag ::      proc(id: Window_ID, flag: Window_Flag)         { PLATFORM_API.set_window_flag(id, flag) }
@@ -255,7 +254,7 @@ Window_Property :: enum {
 	Visible,
 	Minimized,
 	Focused,
-	Resized,
+	Resized_This_Frame,
 }
 
 Platform_API :: struct {
@@ -430,11 +429,11 @@ input_scroll_magnitude :: proc "contextless" (direction: Input_Scroll_Direction)
 // Returns the scroll delta as a 2D vector for the given direction this frame.
 input_scroll_vector :: proc "contextless" (direction: Input_Scroll_Direction) -> Vec2 {
 	if direction == .X {
-		return {1, 0} * f32(platform.mouse_scroll_delta.x)
+		return {1, 0} * platform.mouse_scroll_delta.x
 	} else if direction == .Y {
-		return {0, 1} * f32(platform.mouse_scroll_delta.y)
+		return {0, 1} * platform.mouse_scroll_delta.y
 	} else {
-		return {f32(platform.mouse_scroll_delta.x), f32(platform.mouse_scroll_delta.y)}
+		return {platform.mouse_scroll_delta.x, platform.mouse_scroll_delta.y}
 	}	
 }
 
@@ -589,7 +588,7 @@ emit_window_event :: proc(event: Window_Event) {
 			state.close_requested = true
 		case Window_Did_Resize:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
-			state.properties += {.Resized}
+			state.properties += {.Resized_This_Frame}
 			state.size = e.size
 		case Window_Did_Move:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)

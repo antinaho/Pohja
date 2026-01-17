@@ -20,6 +20,7 @@ DARWIN_PLATFORM_API :: Platform_API {
 	is_window_flag_on = is_window_flag_on,
 	set_window_flag = set_window_flag,
 	clear_window_flag = clear_window_flag,
+	is_window_property_on = is_window_property_on,
 
 	minimize_window = minimize_window,
 	maximize_window = maximize_window,
@@ -29,7 +30,6 @@ DARWIN_PLATFORM_API :: Platform_API {
 	set_window_size = set_window_size_darwin,
 	set_window_focused = set_window_focused_darwin,
 	set_window_opacity = set_window_opacity_darwin,
-
 
 	get_window_size = get_window_size_darwin,
 	get_window_position = get_window_position_darwin,
@@ -44,7 +44,6 @@ DARWIN_PLATFORM_API :: Platform_API {
 	set_window_min_size = set_window_min_size_darwin,
 	set_window_max_size = set_window_max_size_darwin,
 
-
 	process_events = process_events_darwin,
 
 	show_cursor = show_cursor_darwin,
@@ -57,13 +56,11 @@ DARWIN_PLATFORM_API :: Platform_API {
 }
 
 cursor_lock_to_window_darwin :: proc(id: Window_ID) {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	platform.is_cursor_locked = true
 	platform.cursor_locked_window = id
 }
 
 cursor_unlock_from_window_darwin :: proc(id: Window_ID) {
-	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	platform.is_cursor_locked = false
 	platform.cursor_locked_window = 0
 }
@@ -126,6 +123,7 @@ is_window_flag_on :: proc(id: Window_ID, flag: Window_Flag) -> bool {
 	return flag in state.flags
 }
 
+import "core:fmt"
 is_window_property_on :: proc(id: Window_ID, property: Window_Property) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	return property in state.properties
@@ -676,7 +674,7 @@ window_did_move :: proc(notification: ^NS.Notification) {
 	position := window->frame().origin
 	emit_window_event(Window_Did_Move{
 		sender = platform.registry.handle_to_id[cast(Window_Handle)window],
-		position = {int(position.x), int(position.x)},
+		position = {int(position.x), int(position.y)},
 	})
 }
 

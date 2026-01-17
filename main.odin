@@ -31,7 +31,9 @@ main :: proc() {
         }
 
         if input_key_went_down(.W) {
-            hide_cursor()
+            a := is_window_visible(id)
+            b := is_window_hidden(id)
+            fmt.println(is_window_hidden(id))
         }
 
         dt_ms := f64(get_deltatime_ns()) / 1_000_000
