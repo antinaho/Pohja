@@ -65,13 +65,14 @@ cursor_unlock_from_window_darwin :: proc(id: Window_ID) {
 	platform.cursor_locked_window = 0
 }
 
-is_cursor_on_window_darwin :: proc(id: Window_ID) -> bool {
+is_cursor_on_window_darwin :: proc(id: Window_ID, extras: Vec4) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	frame := state.window->frame()
+	rect := state.window->contentLayoutRect()
+	rect = state.window->convertRectToScreen(rect)
 	mouse_pos := platform.mouse_position
 
-	return mouse_pos.x >= f32(frame.origin.x) && mouse_pos.x < f32(frame.origin.x + frame.size.width ) &&
-	       mouse_pos.y >= f32(frame.origin.y) && mouse_pos.y < f32(frame.origin.y + frame.size.height)
+	return mouse_pos.x >= f32(rect.x) && mouse_pos.x < f32(rect.x + rect.width ) &&
+	       mouse_pos.y >= f32(rect.y) && mouse_pos.y < f32(rect.y + rect.height)
 }
 
 show_cursor_darwin :: proc() {
@@ -169,8 +170,8 @@ clear_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 
 get_window_size_darwin :: proc(id: Window_ID) -> Vec2i {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	frame := state.window->frame()
-	return {int(frame.width), int(frame.height)}
+	rect := state.window->contentLayoutRect()
+	return {int(rect.width), int(rect.height)}
 }
 
 get_monitor_count_darwin :: proc() -> int {
@@ -205,13 +206,14 @@ get_monitor_size_darwin :: proc(monitor_index: int) -> Vec2i {
 	return {int(frame.size.width), int(frame.size.height)}
 }
 
-closest_point_within_window_darwin :: proc(id: Window_ID, pos: Vec2) -> Vec2 {
+closest_point_within_window_darwin :: proc(id: Window_ID, pos: Vec2, extra_space: Vec4) -> Vec2 {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	frame := state.window->frame()
+	rect := state.window->contentLayoutRect()
+	rect = state.window->convertRectToScreen(rect)
 
 	return {
-		math.clamp(pos.x, f32(frame.origin.x) + 1, f32(frame.origin.x + frame.size.width  - 1)),
-		math.clamp(pos.y, f32(frame.origin.y) + 1, f32(frame.origin.y + frame.size.height - 1))
+		math.clamp(pos.x, f32(rect.origin.x) + 1 - extra_space.x, f32(rect.origin.x + rect.size.width  - 1) + extra_space.y),
+		math.clamp(pos.y, f32(rect.origin.y) + 1 - extra_space.z, f32(rect.origin.y + rect.size.height - 1) + extra_space.w)
 	}
 }
 
@@ -468,7 +470,7 @@ set_window_size_darwin :: proc(id: Window_ID, w, h: int) {
 		height = NS.Float(height),
 	}
 
-	state.window->setFrame(frame, false)
+	state.window->setFrame(frame, true)
 }
 
 set_window_min_size_darwin :: proc(id: Window_ID, w, h: int) {

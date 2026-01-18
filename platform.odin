@@ -7,6 +7,7 @@ import "core:time"
 
 Vec2i :: [2]int
 Vec2  :: [2]f32
+Vec4 ::  [4]f32
 
 MAX_DELTA_TIME_NS :: #config(MAX_DELTA_TIME_NS, 100 * time.Millisecond) // 100ms, 1/10th second
 
@@ -243,9 +244,11 @@ is_cursor_hidden :: proc() -> bool { return platform.is_cursor_hidden }
 
 cursor_lock_to_window ::       proc(id: Window_ID)          { PLATFORM_API.cursor_lock_to_window(id) }
 cursor_unlock_from_window ::   proc(id: Window_ID)          { PLATFORM_API.cursor_unlock_from_window(id) }
-is_cursor_on_window ::         proc(id: Window_ID) -> bool  { return PLATFORM_API.is_cursor_on_window(id) }
+is_cursor_on_window ::         proc(id: Window_ID,
+	                                extra_space: Vec4) -> bool  { return PLATFORM_API.is_cursor_on_window(id, extra_space) }
 closest_point_within_window :: proc(id: Window_ID, 
-	                                pos: Vec2) -> Vec2  { return PLATFORM_API.closest_point_within_window(id, pos) }
+	                                pos: Vec2,
+								    extra_space: Vec4) -> Vec2  { return PLATFORM_API.closest_point_within_window(id, pos, extra_space) }
 force_cursor_move_to ::        proc(pos: Vec2)            { PLATFORM_API.force_cursor_move_to(pos) }
 
 Window_Properties :: bit_set[Window_Property]
@@ -303,8 +306,8 @@ Platform_API :: struct {
 	hide_cursor: proc(),
 	cursor_lock_to_window: proc(id: Window_ID),
 	cursor_unlock_from_window: proc(id: Window_ID),
-	is_cursor_on_window: proc(id: Window_ID) -> bool,
-	closest_point_within_window: proc(id: Window_ID, pos: Vec2) -> Vec2,
+	is_cursor_on_window: proc(id: Window_ID, extra_space: Vec4) -> bool,
+	closest_point_within_window: proc(id: Window_ID, pos: Vec2, extra_space: Vec4) -> Vec2,
 	force_cursor_move_to: proc(pos: Vec2),
 }
 
@@ -517,8 +520,8 @@ emit_input_event :: proc (event: Input_Event) {
 			platform.mouse_move_delta = {f32(e.x) - platform.mouse_position.x, f32(e.y) - platform.mouse_position.y}
 			platform.mouse_position = {f32(e.x), f32(e.y)}
 
-			if platform.is_cursor_locked && !is_cursor_on_window(0) {
-				new_p := closest_point_within_window(platform.cursor_locked_window, platform.mouse_position)
+			if platform.is_cursor_locked && !is_cursor_on_window(0, {}) {
+				new_p := closest_point_within_window(platform.cursor_locked_window, platform.mouse_position, {0, 0, 0, 32})
 				force_cursor_move_to(new_p)
 				platform.mouse_position = new_p
 			}
