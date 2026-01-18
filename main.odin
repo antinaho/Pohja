@@ -17,7 +17,7 @@ main :: proc() {
 
     p := rawptr(uintptr(id))
 
-
+    set_window_mode(id, Borderless)
 
     for platform_update() {
         if input_key_is_held(.A) {

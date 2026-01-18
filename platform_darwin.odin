@@ -30,9 +30,11 @@ DARWIN_PLATFORM_API :: Platform_API {
 	set_window_size = set_window_size_darwin,
 	set_window_focused = set_window_focused_darwin,
 	set_window_opacity = set_window_opacity_darwin,
+	set_window_mode = set_window_mode,
 
 	get_window_size = get_window_size_darwin,
 	get_window_position = get_window_position_darwin,
+	get_window_scale = get_window_scale,
 
 	get_monitor_count = get_monitor_count_darwin,
 	get_monitor_name = get_monitor_name_darwin,
@@ -67,8 +69,7 @@ cursor_unlock_from_window_darwin :: proc(id: Window_ID) {
 
 is_cursor_on_window_darwin :: proc(id: Window_ID, extras: Vec4) -> bool {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
-	rect := state.window->contentLayoutRect()
-	rect = state.window->convertRectToScreen(rect)
+	rect := state.window->frame()
 	mouse_pos := platform.mouse_position
 
 	return mouse_pos.x >= f32(rect.x) && mouse_pos.x < f32(rect.x + rect.width ) &&
@@ -132,10 +133,12 @@ is_window_property_on :: proc(id: Window_ID, property: Window_Property) -> bool 
 
 flag_to_ns_flag :: proc(flag: Window_Flag) -> NS.WindowStyleFlag {
 	#partial switch flag {
-		case .Resizable:      return NS.WindowStyleFlag.Resizable
-		case .Decorated:      return NS.WindowStyleFlag.Titled
-		case .Closable:       return NS.WindowStyleFlag.Closable
-		case .Miniaturizable: return NS.WindowStyleFlag.Miniaturizable
+		case .Resizable:           return NS.WindowStyleFlag.Resizable
+		case .Decorated:           return NS.WindowStyleFlag.Titled
+		case .Closable:            return NS.WindowStyleFlag.Closable
+		case .Miniaturizable:      return NS.WindowStyleFlag.Miniaturizable
+		case .Titled:              return NS.WindowStyleFlag.Titled
+		case .FullSizeContentView: return NS.WindowStyleFlag.FullSizeContentView
 	}
 	panic("No NS flag for given platform flag")
 }
@@ -145,8 +148,7 @@ set_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 	state.flags += {flag}
 
 	switch flag {
-		case .MainWindow:
-		case .Resizable, .Decorated, .Closable, .Miniaturizable:
+		case .Resizable, .Decorated, .Closable, .Miniaturizable, .Titled, .FullSizeContentView:
 			current := state.window->styleMask()
 			new_mask := current | (1 << NS.UInteger(flag_to_ns_flag(flag)))
 			mask_bitset := transmute(NS.WindowStyleMask)new_mask
@@ -158,14 +160,28 @@ clear_window_flag :: proc(id: Window_ID, flag: Window_Flag) {
 	state := cast(^Darwin_Window_State)get_state_from_id(id)
 	state.flags -= {flag}
 
-	switch flag {
-		case .MainWindow:
-		case .Resizable, .Decorated, .Closable, .Miniaturizable:
+	switch flag {			
+		case .Resizable, .Decorated, .Closable, .Miniaturizable, .Titled, .FullSizeContentView:
 			current := state.window->styleMask()
 			new_mask := current ~ (1 << NS.UInteger(flag_to_ns_flag(flag)))
 			mask_bitset := transmute(NS.WindowStyleMask)new_mask
 			state.window->setStyleMask(mask_bitset)
 	}
+}
+
+set_window_mode :: proc(id: Window_ID, flags: Window_Flags) {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	state.flags = {}
+
+	current: int
+
+	for flag in flags {
+		state.flags += {flag}
+		current = current | (1 << NS.UInteger(flag_to_ns_flag(flag)))
+	}
+
+	mask_bitset := transmute(NS.WindowStyleMask)current
+	state.window->setStyleMask(mask_bitset)
 }
 
 get_window_size_darwin :: proc(id: Window_ID) -> Vec2i {
@@ -450,6 +466,11 @@ get_window_position_darwin :: proc(id: Window_ID) -> Vec2i {
 	y := int(screen_frame.size.height - window_frame.origin.y - window_frame.size.height)
 	
 	return {x, y}
+}
+
+get_window_scale :: proc(id: Window_ID) -> f32 {
+	state := cast(^Darwin_Window_State)get_state_from_id(id)
+	return f32(state.window->backingScaleFactor())
 }
 
 // NOTE: X can be infinite but Y gets capped by screen height

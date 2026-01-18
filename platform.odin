@@ -170,7 +170,7 @@ platform_update :: proc() -> bool {
 	for id, _ in window_close_requested {
 		header := cast(^Window_State_Header)get_state_from_id(id)
 
-		if .MainWindow in header.flags {
+		if header.is_main_window {
 			application_request_shutdown()
 		}
 
@@ -188,8 +188,9 @@ get_window_handle :: proc(id: Window_ID) -> rawptr { return PLATFORM_API.get_win
 // Creates a new window and returns its ID.
 open_window :: proc(width, height: int, title: string) -> Window_ID {
 	id := PLATFORM_API.window_open(width, height, title)
+	state := cast(^Window_State_Header)get_state_from_id(id)
 	if id == 0 {
-		set_window_flag(id, .MainWindow)
+		state.is_main_window = true
 	}
 	return id
 }
@@ -225,6 +226,7 @@ get_window_size ::      proc(id: Window_ID) -> Vec2i { return PLATFORM_API.get_w
 get_window_width ::     proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).x }
 get_window_height ::    proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).y }
 get_window_position ::  proc(id: Window_ID) -> Vec2i { return PLATFORM_API.get_window_position(id) }
+get_window_scale :: proc(id: Window_ID) -> f32 { return PLATFORM_API.get_window_scale(id) }
 
 get_monitor_count ::    proc() -> int                { return PLATFORM_API.get_monitor_count() }
 get_monitor_name ::     proc(monitor: int) -> string { return PLATFORM_API.get_monitor_name(monitor) }
@@ -250,6 +252,7 @@ closest_point_within_window :: proc(id: Window_ID,
 	                                pos: Vec2,
 								    extra_space: Vec4) -> Vec2  { return PLATFORM_API.closest_point_within_window(id, pos, extra_space) }
 force_cursor_move_to ::        proc(pos: Vec2)            { PLATFORM_API.force_cursor_move_to(pos) }
+set_window_mode :: proc(id: Window_ID, flags: Window_Flags) { PLATFORM_API.set_window_mode(id, flags) }
 
 Window_Properties :: bit_set[Window_Property]
 Window_Property :: enum {
@@ -259,6 +262,7 @@ Window_Property :: enum {
 	Focused,
 	Resized_This_Frame,
 }
+
 
 Platform_API :: struct {
 	window_state_size: proc() -> int,
@@ -282,9 +286,11 @@ Platform_API :: struct {
 	set_window_size:      proc(id: Window_ID, width, height: int),
 	set_window_focused:   proc(id: Window_ID),
 	set_window_opacity:   proc(id: Window_ID, opacity: f32),
+	set_window_mode:      proc(id: Window_ID, flags: Window_Flags),
 	
 	get_window_size:      proc(id: Window_ID) -> Vec2i,
 	get_window_position:  proc(id: Window_ID) -> Vec2i,
+	get_window_scale:     proc(id: Window_ID) -> f32,
 	
 	get_monitor_count:    proc() -> int,
 	get_monitor_name:     proc(monitor: int) -> string,
@@ -315,19 +321,27 @@ Window_ID :: distinct u32
 Window_Handle :: distinct rawptr
 
 Window_Flags :: bit_set[Window_Flag]
+Standard ::          Window_Flags { .Titled, .Closable, .Miniaturizable, .Resizable}
+Pop_Up ::            Window_Flags { .Titled, .Closable, .Resizable }
+Pop_Up_Fixed_Size :: Window_Flags { .Titled, .Closable }
+Borderless ::        Window_Flags { .FullSizeContentView }
+
 Window_Flag  :: enum uint {
-	MainWindow,      // Closing this window shuts down the application
 	Resizable,       // Window can be resized by user
 	Decorated,       // Window has title bar and borders
 	Closable,		 // Close button present in titlebar
 	Miniaturizable,  // Minimize button present in titlebar
+	Titled,
+	FullSizeContentView,
 }
+
 
 Window_State_Header :: struct {
 	id: Window_ID,
 	flags: Window_Flags,
 	is_alive: bool,
 	close_requested: bool,
+	is_main_window: bool,
 	
 	title: string,
 	position: Vec2i,
@@ -521,7 +535,7 @@ emit_input_event :: proc (event: Input_Event) {
 			platform.mouse_position = {f32(e.x), f32(e.y)}
 
 			if platform.is_cursor_locked && !is_cursor_on_window(0, {}) {
-				new_p := closest_point_within_window(platform.cursor_locked_window, platform.mouse_position, {0, 0, 0, 32})
+				new_p := closest_point_within_window(platform.cursor_locked_window, platform.mouse_position, {0, 0, 0, 0})
 				force_cursor_move_to(new_p)
 				platform.mouse_position = new_p
 			}
