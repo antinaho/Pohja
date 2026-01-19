@@ -6,7 +6,7 @@ import "core:mem"
 import "core:time"
 
 Vec2i :: [2]int
-Vec2  :: [2]f32
+Vec2 ::  [2]f32
 Vec4 ::  [4]f32
 
 MAX_DELTA_TIME_NS :: #config(MAX_DELTA_TIME_NS, 100 * time.Millisecond) // 100ms, 1/10th second
@@ -223,14 +223,14 @@ set_window_focused ::   proc(id: Window_ID)                     { PLATFORM_API.s
 set_window_opacity ::   proc(id: Window_ID, value: f32)         { PLATFORM_API.set_window_opacity(id, value) }
 
 get_window_size ::      proc(id: Window_ID) -> Vec2i { return PLATFORM_API.get_window_size(id) }
-get_window_width ::     proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).x }
-get_window_height ::    proc(id: Window_ID) -> int    { return PLATFORM_API.get_window_size(id).y }
+get_window_width ::     proc(id: Window_ID) -> int   { return PLATFORM_API.get_window_size(id).x }
+get_window_height ::    proc(id: Window_ID) -> int   { return PLATFORM_API.get_window_size(id).y }
 get_window_position ::  proc(id: Window_ID) -> Vec2i { return PLATFORM_API.get_window_position(id) }
-get_window_scale :: proc(id: Window_ID) -> f32 { return PLATFORM_API.get_window_scale(id) }
+get_window_scale :: proc(id: Window_ID) -> f32       { return PLATFORM_API.get_window_scale(id) }
 
 get_monitor_count ::    proc() -> int                { return PLATFORM_API.get_monitor_count() }
 get_monitor_name ::     proc(monitor: int) -> string { return PLATFORM_API.get_monitor_name(monitor) }
-get_monitor_size ::     proc(monitor: int) -> Vec2i { return PLATFORM_API.get_monitor_size(monitor)}
+get_monitor_size ::     proc(monitor: int) -> Vec2i  { return PLATFORM_API.get_monitor_size(monitor)}
 get_monitor_width ::    proc(monitor: int) -> int    { return PLATFORM_API.get_monitor_size(monitor).x}
 get_monitor_height ::   proc(monitor: int) -> int    { return PLATFORM_API.get_monitor_size(monitor).y}
 
@@ -240,19 +240,20 @@ get_clipboard_text :: proc() -> string   { return PLATFORM_API.get_clipboard_tex
 set_window_min_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_min_size(id, width, height) }
 set_window_max_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_max_size(id, width, height) }
 
-show_cursor :: proc() { PLATFORM_API.show_cursor() }
-hide_cursor :: proc() { PLATFORM_API.hide_cursor() }
+show_cursor :: proc()              { PLATFORM_API.show_cursor() }
+hide_cursor :: proc()              { PLATFORM_API.hide_cursor() }
 is_cursor_hidden :: proc() -> bool { return platform.is_cursor_hidden }
 
-cursor_lock_to_window ::       proc(id: Window_ID)          { PLATFORM_API.cursor_lock_to_window(id) }
-cursor_unlock_from_window ::   proc(id: Window_ID)          { PLATFORM_API.cursor_unlock_from_window(id) }
+cursor_lock_to_window ::       proc(id: Window_ID)              { PLATFORM_API.cursor_lock_to_window(id) }
+cursor_unlock_from_window ::   proc(id: Window_ID)              { PLATFORM_API.cursor_unlock_from_window(id) }
 is_cursor_on_window ::         proc(id: Window_ID,
 	                                extra_space: Vec4) -> bool  { return PLATFORM_API.is_cursor_on_window(id, extra_space) }
 closest_point_within_window :: proc(id: Window_ID, 
 	                                pos: Vec2,
 								    extra_space: Vec4) -> Vec2  { return PLATFORM_API.closest_point_within_window(id, pos, extra_space) }
-force_cursor_move_to ::        proc(pos: Vec2)            { PLATFORM_API.force_cursor_move_to(pos) }
-set_window_mode :: proc(id: Window_ID, flags: Window_Flags) { PLATFORM_API.set_window_mode(id, flags) }
+force_cursor_move_to ::        proc(pos: Vec2)                  { PLATFORM_API.force_cursor_move_to(pos) }
+set_window_mode ::             proc(id: Window_ID,
+	                                flags: Window_Flags)        { PLATFORM_API.set_window_mode(id, flags) }
 
 Window_Properties :: bit_set[Window_Property]
 Window_Property :: enum {
@@ -296,8 +297,8 @@ Platform_API :: struct {
 	get_monitor_name:     proc(monitor: int) -> string,
 	get_monitor_size:     proc(monitor: int) -> Vec2i,
 
-	set_clipboard_text: proc(text: string),
-	get_clipboard_text: proc() -> string,
+	set_clipboard_text:   proc(text: string),
+	get_clipboard_text:   proc() -> string,
 
 	set_window_min_size:  proc(id: Window_ID, width, height: int),
 	set_window_max_size:  proc(id: Window_ID, width, height: int),
@@ -306,35 +307,32 @@ Platform_API :: struct {
 	// Need to buy second monitor before I can implement this :)
 	//set_window_monitor:   proc(id: Window_ID, monitor: int),
 	
-	process_events: proc(),
+	process_events:              proc(),
 
-	show_cursor: proc(),
-	hide_cursor: proc(),
-	cursor_lock_to_window: proc(id: Window_ID),
-	cursor_unlock_from_window: proc(id: Window_ID),
-	is_cursor_on_window: proc(id: Window_ID, extra_space: Vec4) -> bool,
+	show_cursor:                 proc(),
+	hide_cursor:                 proc(),
+	cursor_lock_to_window:       proc(id: Window_ID),
+	cursor_unlock_from_window:   proc(id: Window_ID),
+	is_cursor_on_window:         proc(id: Window_ID, extra_space: Vec4) -> bool,
 	closest_point_within_window: proc(id: Window_ID, pos: Vec2, extra_space: Vec4) -> Vec2,
-	force_cursor_move_to: proc(pos: Vec2),
+	force_cursor_move_to:        proc(pos: Vec2),
 }
 
 Window_ID :: distinct u32
 Window_Handle :: distinct rawptr
 
 Window_Flags :: bit_set[Window_Flag]
-Standard ::          Window_Flags { .Titled, .Closable, .Miniaturizable, .Resizable}
-Pop_Up ::            Window_Flags { .Titled, .Closable, .Resizable }
-Pop_Up_Fixed_Size :: Window_Flags { .Titled, .Closable }
+Classic ::           Window_Flags { .Titled, .Closable, .Miniaturizable, .Resizable}
 Borderless ::        Window_Flags { .FullSizeContentView }
 
 Window_Flag  :: enum uint {
-	Resizable,       // Window can be resized by user
-	Decorated,       // Window has title bar and borders
-	Closable,		 // Close button present in titlebar
-	Miniaturizable,  // Minimize button present in titlebar
+	Resizable,
+	Decorated,
+	Closable,
+	Miniaturizable,
 	Titled,
 	FullSizeContentView,
 }
-
 
 Window_State_Header :: struct {
 	id: Window_ID,
