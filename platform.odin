@@ -23,42 +23,35 @@ PLATFORM_API :: DEFAULT_PLATFORM_API
 platform: Platform
 
 Platform :: struct {
-	platform_arena: mem.Arena,
-
-	is_active: bool,
-	registry: ^Window_Registry,
-
-	window_states: []byte,
-	state_size: int,
-	max_windows: int,
-	ctx: runtime.Context,
-	frame_allocator: runtime.Allocator,
-
-	keys_press_started: #sparse [Input_Keyboard_Key]bool,
-	keys_held: #sparse [Input_Keyboard_Key]bool,
-	keys_released: #sparse [Input_Keyboard_Key]bool,
-
-	mouse_press_started: #sparse [Input_Mouse_Button]bool,
-	mouse_held: #sparse [Input_Mouse_Button]bool,
-	mouse_released: #sparse [Input_Mouse_Button]bool,
-
-	mouse_position: Vec2,
-	mouse_move_delta: Vec2,
-	mouse_scroll_delta: Vec2,
-
-	events: [MAX_INPUT_EVENTS_PER_FRAME]Input_Event,
-	event_count: int,
-
-	shutdown_requested: bool,
-	is_cursor_hidden: bool,
-
-	is_cursor_locked: bool,
+	platform_arena:       mem.Arena,
+	is_active:            bool,
+	registry:             ^Window_Registry,
+	window_states:        []byte,
+	state_size:           int,
+	max_windows:          int,
+	ctx:                  runtime.Context,
+	frame_allocator:      runtime.Allocator,
+	
+	keys_press_started:   #sparse [Input_Keyboard_Key]bool,
+	keys_held:            #sparse [Input_Keyboard_Key]bool,
+	keys_released:        #sparse [Input_Keyboard_Key]bool,
+	mouse_press_started:  #sparse [Input_Mouse_Button]bool,
+	mouse_held:           #sparse [Input_Mouse_Button]bool,
+	mouse_released:       #sparse [Input_Mouse_Button]bool,
+	mouse_position:       Vec2,
+	mouse_move_delta:     Vec2,
+	mouse_scroll_delta:   Vec2,
+	events:               [MAX_INPUT_EVENTS_PER_FRAME]Input_Event,
+	event_count:          int,
+	
+	shutdown_requested:   bool,
+	is_cursor_hidden:     bool,
+	is_cursor_locked:     bool,
 	cursor_locked_window: Window_ID,
 
-	runtime:     time.Duration,
-	delta_time:  time.Duration,
-	previous_time:  time.Tick,
-	fps:            int,
+	runtime:              time.Duration,
+	delta_time:           time.Duration,
+	previous_time:        time.Tick,
 }
 
 get_runtime_ns ::    proc() -> time.Duration { return platform.runtime }
@@ -268,49 +261,44 @@ Window_Property :: enum {
 	Resized_This_Frame,
 }
 
-
 Platform_API :: struct {
-	window_state_size: proc() -> int,
+	window_state_size:           proc() -> int,
 
-	get_window_handle: proc(id: Window_ID) -> Window_Handle,
-	
-	window_open:  proc(width, height: int, title: string) -> Window_ID,
-	window_close: proc(id: Window_ID),
+	get_window_handle:           proc(id: Window_ID) -> Window_Handle,
 
-	is_window_property_on: proc(id: Window_ID, property: Window_Property) -> bool,
-	
-	is_window_flag_on:    proc(id: Window_ID, flag: Window_Flag) -> bool,
-	set_window_flag:      proc(id: Window_ID, flag: Window_Flag),
-	clear_window_flag:    proc(id: Window_ID, flag: Window_Flag),
+	window_open:                 proc(width, height: int, title: string) -> Window_ID,
+	window_close:                proc(id: Window_ID),
 
-	minimize_window:      proc(id: Window_ID),
-	maximize_window:      proc(id: Window_ID),
+	is_window_property_on:       proc(id: Window_ID, property: Window_Property) -> bool,
 
-	set_window_title:     proc(id: Window_ID, title: string), 
-	set_window_position:  proc(id: Window_ID, x, y: int),
-	set_window_size:      proc(id: Window_ID, width, height: int),
-	set_window_focused:   proc(id: Window_ID),
-	set_window_opacity:   proc(id: Window_ID, opacity: f32),
-	set_window_mode:      proc(id: Window_ID, flags: Window_Flags),
-	
-	get_window_size:      proc(id: Window_ID) -> Vec2i,
-	get_window_position:  proc(id: Window_ID) -> Vec2i,
-	get_window_scale:     proc(id: Window_ID) -> f32,
-	
-	get_monitor_count:    proc() -> int,
-	get_monitor_name:     proc(monitor: int) -> string,
-	get_monitor_size:     proc(monitor: int) -> Vec2i,
+	is_window_flag_on:           proc(id: Window_ID, flag: Window_Flag) -> bool,
+	set_window_flag:             proc(id: Window_ID, flag: Window_Flag),
+	clear_window_flag:           proc(id: Window_ID, flag: Window_Flag),
 
-	set_clipboard_text:   proc(text: string),
-	get_clipboard_text:   proc() -> string,
+	minimize_window:             proc(id: Window_ID),
+	maximize_window:             proc(id: Window_ID),
 
-	set_window_min_size:  proc(id: Window_ID, width, height: int),
-	set_window_max_size:  proc(id: Window_ID, width, height: int),
+	set_window_title:            proc(id: Window_ID, title: string), 
+	set_window_position:         proc(id: Window_ID, x, y: int),
+	set_window_size:             proc(id: Window_ID, width, height: int),
+	set_window_focused:          proc(id: Window_ID),
+	set_window_opacity:          proc(id: Window_ID, opacity: f32),
+	set_window_mode:             proc(id: Window_ID, flags: Window_Flags),
 
-	//set_window_icon:      proc(id: Window_ID, image: Image),
-	// Need to buy second monitor before I can implement this :)
-	//set_window_monitor:   proc(id: Window_ID, monitor: int),
-	
+	get_window_size:             proc(id: Window_ID) -> Vec2i,
+	get_window_position:         proc(id: Window_ID) -> Vec2i,
+	get_window_scale:            proc(id: Window_ID) -> f32,
+
+	get_monitor_count:           proc() -> int,
+	get_monitor_name:            proc(monitor: int) -> string,
+	get_monitor_size:            proc(monitor: int) -> Vec2i,
+
+	set_clipboard_text:          proc(text: string),
+	get_clipboard_text:          proc() -> string,
+
+	set_window_min_size:         proc(id: Window_ID, width, height: int),
+	set_window_max_size:         proc(id: Window_ID, width, height: int),
+
 	process_events:              proc(),
 
 	show_cursor:                 proc(),
@@ -320,6 +308,10 @@ Platform_API :: struct {
 	is_cursor_on_window:         proc(id: Window_ID, extra_space: Vec4) -> bool,
 	closest_point_within_window: proc(id: Window_ID, pos: Vec2, extra_space: Vec4) -> Vec2,
 	force_cursor_move_to:        proc(pos: Vec2),
+
+	//set_window_icon:      proc(id: Window_ID, image: Image),
+	// Need to buy second monitor before I can implement this :)
+	//set_window_monitor:   proc(id: Window_ID, monitor: int),
 }
 
 Window_ID :: distinct u32
@@ -552,8 +544,6 @@ Platform_Event :: enum {
 	DidResignActive,
 	ShouldTerminate,
 	TerminateAfterLastWindowClosed,
-	DidHide,
-	DidUnhide,
 }
 
 Platform_Event_Reply :: union {
@@ -571,8 +561,6 @@ emit_platform_event :: proc(event: Platform_Event) -> (reply: Platform_Event_Rep
 			return false
 		case .TerminateAfterLastWindowClosed:
 			return true
-		case .DidHide:
-		case .DidUnhide:
 	}
 
 	return
@@ -615,15 +603,15 @@ emit_window_event :: proc(event: Window_Event) {
 		case Window_Change_Key_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			if e.state { state.properties += {.Focused} }
-			else { state.properties -= {.Focused} }
+			else       { state.properties -= {.Focused} }
 		case Window_Change_Miniaturize_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			if e.state { state.properties += {.Minimized} }
-			else { state.properties -= {.Minimized} }
+			else       { state.properties -= {.Minimized} }
 		case Window_Change_Full_Screen_State:
 			state := cast(^Window_State_Header)get_state_from_id(e.sender)
 			if e.state { state.properties += {.Fullscreen} }
-			else { state.properties -= {.Fullscreen} }
+			else       { state.properties -= {.Fullscreen} }
 	}
 }
 

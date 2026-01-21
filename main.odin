@@ -1,9 +1,22 @@
 package pohja
 
 import "core:fmt"
+import "core:mem"
+import "core:log"
 
 // For testing, should never be ran itself
 main :: proc() {
+    when ODIN_DEBUG {
+        default_allocator := context.allocator
+        tracking_allocator: mem.Tracking_Allocator
+        mem.tracking_allocator_init(&tracking_allocator, default_allocator)
+        context.allocator = mem.tracking_allocator(&tracking_allocator)
+        defer reset_tracking_allocator(&tracking_allocator)
+    }
+
+    context.logger = log.create_console_logger()
+	defer log.destroy_console_logger(context.logger)
+
     platform_init(1)
     id := open_window(
         width = 900,
@@ -37,9 +50,23 @@ main :: proc() {
 
         }
 
-        dt_ms := f64(get_deltatime_ns()) / 1_000_000
-        set_window_title(id, fmt.tprintf("%.1f ms", dt_ms))
+        
+        set_window_title(id, fmt.tprintf("%.1f ms", get_fps()))
     }
 
     cleanup()
+}
+
+
+reset_tracking_allocator :: proc(a: ^mem.Tracking_Allocator) -> (err: bool) {
+	fmt.println("Tracking allocator: ")
+
+	for _, val in a.allocation_map {
+		fmt.printfln("%v: Leaked %v bytes", val.location, val.size)
+		err = true
+	}
+
+	mem.tracking_allocator_clear(a)
+
+	return
 }

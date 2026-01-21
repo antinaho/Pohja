@@ -623,8 +623,6 @@ Application_Delegate_Template :: NS.ApplicationDelegateTemplate {
 	applicationDidResignActive                      = application_did_resign_active,
 	applicationShouldTerminate                      = application_should_terminate,
 	applicationShouldTerminateAfterLastWindowClosed = application_should_terminate_after_last_window_closed,
-	applicationDidHide                              = application_did_hide,
-	applicationDidUnhide                            = application_did_unhide,
 }
 
 application_did_become_active :: proc(notification: ^NS.Notification) { emit_platform_event(.DidBecomeActive) }
@@ -641,13 +639,6 @@ application_should_terminate_after_last_window_closed :: proc(sender: ^NS.Applic
 	reply := emit_platform_event(.TerminateAfterLastWindowClosed)
 	value := reply.(bool)
 	return NS.BOOL(value)
-}
-
-application_did_hide :: proc(notification: ^NS.Notification) { 
-	emit_platform_event(.DidHide)
-}
-application_did_unhide :: proc(notification: ^NS.Notification) {
-	emit_platform_event(.DidUnhide)
 }
 
 // WINDOW DELEGATE
