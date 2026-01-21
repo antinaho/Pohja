@@ -9,7 +9,7 @@ Vec2i :: [2]int
 Vec2 ::  [2]f32
 Vec4 ::  [4]f32
 
-MAX_DELTA_TIME_NS :: #config(MAX_DELTA_TIME_NS, 100 * time.Millisecond) // 100ms, 1/10th second
+MAX_DELTA_TIME : time.Duration : #config(MAX_DELTA_TIME, time.Nanosecond * 50_000_000) // 20 fps
 
 when ODIN_OS == .Darwin {
 	DEFAULT_PLATFORM_API :: DARWIN_PLATFORM_API
@@ -55,13 +55,16 @@ Platform :: struct {
 	is_cursor_locked: bool,
 	cursor_locked_window: Window_ID,
 
-	runtime_ns:     i64,
-	delta_time_ns:  i64,
+	runtime:     time.Duration,
+	delta_time:  time.Duration,
 	previous_time:  time.Tick,
+	fps:            int,
 }
 
-get_runtime_ns ::   proc() -> i64 { return platform.runtime_ns }
-get_deltatime_ns :: proc() -> i64 { return platform.delta_time_ns }
+get_runtime_ns ::    proc() -> time.Duration { return platform.runtime }
+get_deltatime_ns ::  proc() -> time.Duration { return platform.delta_time }
+get_deltatime_f64 :: proc() -> f64 { return time.duration_seconds(platform.delta_time) }
+get_fps ::           proc() -> f64 { return 1.0 / time.duration_seconds(platform.delta_time) }
 
 // Initializes the platform. Call before any other platform procedures.
 platform_init :: proc(max_windows: int = 1) {
@@ -143,15 +146,16 @@ platform_update :: proc() -> bool {
 	PLATFORM_API.process_events()
 	defer platform.event_count = 0
 
-	delta_ns := i64(time.tick_since(platform.previous_time))
+	delta_ns := time.tick_since(platform.previous_time)
 	platform.previous_time = time.tick_now()
 
-	if delta_ns > i64(MAX_DELTA_TIME_NS) {
-		delta_ns = i64(MAX_DELTA_TIME_NS)
+	if delta_ns > MAX_DELTA_TIME {
+		log.debug("Long delta")
+		delta_ns = MAX_DELTA_TIME
 	}
 
-	platform.delta_time_ns = delta_ns
-	platform.runtime_ns += delta_ns
+	platform.delta_time = delta_ns
+	platform.runtime += delta_ns
 	
 	window_close_requested := make(map[Window_ID]bool, allocator=platform.frame_allocator)
 	for i in 0..<platform.max_windows {
@@ -240,8 +244,8 @@ get_clipboard_text :: proc() -> string   { return PLATFORM_API.get_clipboard_tex
 set_window_min_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_min_size(id, width, height) }
 set_window_max_size :: proc(id: Window_ID, width, height: int) { PLATFORM_API.set_window_max_size(id, width, height) }
 
-show_cursor :: proc()              { PLATFORM_API.show_cursor() }
-hide_cursor :: proc()              { PLATFORM_API.hide_cursor() }
+show_cursor ::      proc()         { PLATFORM_API.show_cursor() }
+hide_cursor ::      proc()         { PLATFORM_API.hide_cursor() }
 is_cursor_hidden :: proc() -> bool { return platform.is_cursor_hidden }
 
 cursor_lock_to_window ::       proc(id: Window_ID)              { PLATFORM_API.cursor_lock_to_window(id) }

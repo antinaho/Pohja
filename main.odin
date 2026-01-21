@@ -11,7 +11,6 @@ main :: proc() {
         title = "Hellope",)
 
     set_window_min_size(id, 400, 400)
-    
     cursor_lock_to_window(id)
     //set_window_opacity(id, 0.66)
 
